@@ -27,7 +27,10 @@ import {
   type RiskTrend,
 } from '@vorionsys/rainbow';
 import { FleetSimulator, type SimAgentInfo } from './simulator';
-import { computeCorrectedRiskTrend } from './corrected-risk-trend';
+import {
+  computeCorrectedRiskTrend,
+  RISK_SEED_WINDOW_MS,
+} from './corrected-risk-trend';
 
 /** Demo seed — fixed so every cold start tells the same relative story */
 const SEED = 20260606;
@@ -103,8 +106,11 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
 
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const window = rainbow.computeAnalyticsWindow({ duration, agentId }, now);
-  const agentSignals = rainbow.collector.query(agentId, from, now);
-  const correctedRisk = computeCorrectedRiskTrend(agentSignals);
+  // Seed the rolling-24h accumulator with pre-window failures so the left
+  // edge of the chart reflects true accumulated pressure, not a cold start
+  const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
+  const riskSignals = rainbow.collector.query(agentId, seedFrom, now);
+  const correctedRisk = computeCorrectedRiskTrend(riskSignals, from.getTime());
 
   const fleet = rainbow.getOrchestrationSnapshot(
     { agentScores: sim.currentScores(), correlationAlerts: [], escalationEvents: [] },
@@ -165,10 +171,11 @@ export function getAgentRiskTrend(durationRaw?: string, agentId?: string): RiskT
   sim.ensureUpTo(now);
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
+  const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
   const signals = agentId
-    ? rainbow.collector.query(agentId, from, now)
-    : rainbow.collector.queryAll(from, now);
-  return computeCorrectedRiskTrend(signals);
+    ? rainbow.collector.query(agentId, seedFrom, now)
+    : rainbow.collector.queryAll(seedFrom, now);
+  return computeCorrectedRiskTrend(signals, from.getTime());
 }
 
 /** Fleet-wide orchestration snapshot */

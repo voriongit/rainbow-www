@@ -55,11 +55,26 @@ function tierIndexFor(score: number): number {
 }
 
 /**
+ * Pre-window seeding span: callers should pass signals starting this far
+ * BEFORE the display window so every sample's rolling 24h sum is complete.
+ */
+export const RISK_SEED_WINDOW_MS = ACCUMULATOR_WINDOW_MS;
+
+/**
  * Compute the corrected risk accumulator trend from signals.
  * Mirrors the library's sampling/breach semantics; only the per-failure
  * contribution differs (P(T) × R instead of the R-only proxy).
+ *
+ * `displayFromMs` — when provided, ALL passed signals feed the rolling sum
+ * (pass signals from `displayFromMs - RISK_SEED_WINDOW_MS` onward), but
+ * samples/peak/breaches are reported only for timestamps inside the display
+ * window. Without seeding, the left edge of every window would artificially
+ * ramp from zero and sub-24h windows would understate a rolling-24h metric.
  */
-export function computeCorrectedRiskTrend(signals: IngestedSignal[]): RiskTrend {
+export function computeCorrectedRiskTrend(
+  signals: IngestedSignal[],
+  displayFromMs?: number
+): RiskTrend {
   if (signals.length === 0) {
     return {
       currentAccumulatorValue: 0,
@@ -85,6 +100,7 @@ export function computeCorrectedRiskTrend(signals: IngestedSignal[]): RiskTrend 
   }
 
   const uniqueTimestamps = [...new Set(signals.map((s) => s.timestamp.getTime()))]
+    .filter((t) => displayFromMs === undefined || t >= displayFromMs)
     .sort((a, b) => a - b)
     .map((t) => new Date(t));
 
