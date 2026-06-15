@@ -70,13 +70,20 @@ export function CommandPalette({ items }: { items: CommandItem[] }) {
     }));
   }, [results]);
 
+  // Effective selection, clamped to the current result set at render time
+  // (derive rather than sync state in an effect).
+  const selectedIndex = results.length === 0 ? 0 : Math.min(selected, results.length - 1);
+
   const close = useCallback(() => setOpen(false), []);
 
-  // Global toggle: ⌘K / Ctrl-K opens (and closes) the palette.
+  // Global toggle: ⌘K / Ctrl-K opens (and closes) the palette. The reset lives
+  // here (an event handler), not in an effect, so it never cascades renders.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        setQuery('');
+        setSelected(0);
         setOpen((v) => !v);
       }
     };
@@ -84,27 +91,19 @@ export function CommandPalette({ items }: { items: CommandItem[] }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Reset query + selection whenever the palette opens, then focus the input.
+  // Focus the input after the overlay paints (no state writes here).
   useEffect(() => {
     if (!open) return;
-    setQuery('');
-    setSelected(0);
-    // Focus after paint so autoFocus/ref are mounted.
     const id = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(id);
   }, [open]);
-
-  // Clamp the selection if the result set shrinks beneath it.
-  useEffect(() => {
-    setSelected((s) => (results.length === 0 ? 0 : Math.min(s, results.length - 1)));
-  }, [results.length]);
 
   // Keep the highlighted row scrolled into view.
   useEffect(() => {
     if (!open) return;
     const el = listRef.current?.querySelector<HTMLElement>('[data-selected="true"]');
     el?.scrollIntoView({ block: 'nearest' });
-  }, [selected, open]);
+  }, [selectedIndex, open]);
 
   const navigate = useCallback(
     (item: CommandItem) => {
@@ -123,13 +122,13 @@ export function CommandPalette({ items }: { items: CommandItem[] }) {
     if (results.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelected((s) => (s + 1) % results.length);
+      setSelected((selectedIndex + 1) % results.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelected((s) => (s - 1 + results.length) % results.length);
+      setSelected((selectedIndex - 1 + results.length) % results.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const item = results[selected];
+      const item = results[selectedIndex];
       if (item) navigate(item);
     }
   };
@@ -184,7 +183,7 @@ export function CommandPalette({ items }: { items: CommandItem[] }) {
                   {KIND_LABEL[group.kind]}
                 </div>
                 {group.rows.map(({ item, index }) => {
-                  const active = index === selected;
+                  const active = index === selectedIndex;
                   return (
                     <button
                       key={`${item.kind}:${item.href}:${index}`}

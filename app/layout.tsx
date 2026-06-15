@@ -3,12 +3,15 @@
 
 import type { Metadata } from 'next';
 import { Analytics } from '@vercel/analytics/next';
+import { Inter } from 'next/font/google';
 import { TRUST_FACTORS } from '@vorionsys/basis-spec';
 import './globals.css';
 import { getAgents } from './lib/data-source';
 import { CONCEPTS } from './lib/glossary';
 import { TIER_ORDER, tierName } from './lib/tiers';
 import { CommandPalette, type CommandItem } from './components/command-palette';
+
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 /** Build the global command-palette index (server-side, from live + canonical data). */
 function buildCommandItems(): CommandItem[] {
@@ -71,14 +74,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="bg-[#05050a] text-white antialiased font-sans">
+    <html lang="en" className={inter.className}>
+      <body className="bg-[#05050a] text-white antialiased">
         {children}
         <CommandPalette items={buildCommandItems()} />
         <Analytics />
