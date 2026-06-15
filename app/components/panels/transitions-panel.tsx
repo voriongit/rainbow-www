@@ -125,6 +125,64 @@ export function TransitionsPanel({
             </div>
           </div>
         )}
+
+        {/* By signal type */}
+        {total > 0 && Object.keys(distribution.byType).length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] uppercase tracking-wider text-white/40">By signal type</p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(distribution.byType)
+                .sort((a, b) => b[1] - a[1])
+                .map(([type, count]) => (
+                  <ConceptTooltip key={type} slug={conceptSlug.signalType(type)}>
+                    <ExploreLink
+                      href={exploreHref(`/signal-type/${type}`, { window: duration })}
+                      variant="block"
+                      className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[11px] text-white/60"
+                    >
+                      {type}: {count}
+                    </ExploreLink>
+                  </ConceptTooltip>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* By risk level */}
+        {total > 0 && Object.keys(distribution.byRiskLevel).length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] uppercase tracking-wider text-white/40">By risk level</p>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(distribution.byRiskLevel)
+                .sort((a, b) => b[1] - a[1])
+                .map(([level, count]) => (
+                  <ConceptTooltip key={level} slug={conceptSlug.risk(level)}>
+                    <ExploreLink
+                      href={exploreHref(`/risk/${level}`, { window: duration })}
+                      variant="block"
+                      className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-white/60"
+                    >
+                      {level}: {count}
+                    </ExploreLink>
+                  </ConceptTooltip>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Lifecycle changes */}
+        {transitions.lifecycleChanges.length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] uppercase tracking-wider text-white/40">Lifecycle changes</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/55">
+              {transitions.lifecycleChanges.map((lc, i) => (
+                <span key={`${lc.from}-${lc.to}-${i}`}>
+                  {lc.from} → {lc.to} <span className="text-white/35">×{lc.count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Panel>
   );

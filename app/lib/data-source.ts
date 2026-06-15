@@ -26,6 +26,7 @@ import {
   type NonBinaryStateSnapshot,
   type RiskTrend,
   type IngestedSignal,
+  type RecordedInsight,
 } from '@vorionsys/rainbow';
 import { FleetSimulator, type SimAgentInfo } from './simulator';
 import {
@@ -88,6 +89,8 @@ export interface DashboardData {
   fleet: OrchestrationSnapshot;
   /** Non-binary state snapshot (16-factor health) for the selected agent */
   state: NonBinaryStateSnapshot;
+  /** Rule-based insights derived from the selected agent's window */
+  insights: RecordedInsight[];
   /** Total signals across the fleet within the window */
   fleetSignalCount: number;
 }
@@ -132,6 +135,9 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
 
   const fleetSignalCount = rainbow.collector.queryAll(from, now).length;
 
+  // Rule-based insights derived from the selected agent's window analytics.
+  const insights = rainbow.getInsights(window, now);
+
   return {
     computedAt: now,
     duration,
@@ -142,6 +148,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
     correctedRisk,
     fleet,
     state,
+    insights,
     fleetSignalCount,
   };
 }

@@ -33,7 +33,8 @@ export type ConceptCategory =
   | 'severity'
   | 'metric'
   | 'formula'
-  | 'canary';
+  | 'canary'
+  | 'insight';
 
 export interface Concept {
   slug: string;
@@ -60,6 +61,7 @@ export const CATEGORY_LABELS: Record<ConceptCategory, string> = {
   metric: 'Metrics',
   formula: 'Formulas & thresholds',
   canary: 'Canary probes',
+  insight: 'Insight types',
 };
 
 export const slugify = (s: string): string =>
@@ -312,6 +314,25 @@ const formulaConcepts: Concept[] = [
   },
 ];
 
+const INSIGHT_MEANINGS: { cat: string; meaning: string }[] = [
+  { cat: 'TREND_DETECTED', meaning: 'A sustained directional trust trend (rising or falling) was detected over the window — not just noise.' },
+  { cat: 'FLEET_ANOMALY', meaning: 'A fleet-wide anomaly pattern: multiple agents deviating together in a correlated way.' },
+  { cat: 'DELEGATION_RISK', meaning: 'A risky delegation pattern — e.g. requestor→handler pairs concentrating or colluding beyond a safe share.' },
+  { cat: 'DORMANCY_WARNING', meaning: 'Inactivity is accruing stepped dormancy deductions; the agent may be idle or under-utilized.' },
+  { cat: 'PROMOTION_CANDIDATE', meaning: 'The agent has sustained healthy signals and may be eligible for promotion to a higher trust tier.' },
+  { cat: 'FACTOR_DEGRADATION', meaning: 'One or more trust factors are degrading — the agent is weakening on a specific competency.' },
+  { cat: 'CB_PATTERN', meaning: 'A circuit-breaker pattern — trips, degraded entries, and/or repeated recovery cycles worth attention.' },
+  { cat: 'ACCUMULATOR_ESCALATION', meaning: 'The rolling risk accumulator is escalating toward (or past) its warning/degraded/breaker thresholds.' },
+];
+
+const insightConcepts: Concept[] = INSIGHT_MEANINGS.map(({ cat, meaning }) => ({
+  slug: `insight-${cat.toLowerCase().replace(/_/g, '-')}`,
+  term: cat.replace(/_/g, ' '),
+  category: 'insight',
+  short: meaning,
+  long: `${meaning} RAINBOW's insight engine derives this rule-based finding from the window analytics (trajectory, transitions, distribution, risk accumulator); each insight names the agents involved and, where available, an evidence chain of supporting events.`,
+}));
+
 export const CONCEPTS: Concept[] = [
   ...tierConcepts,
   ...riskConcepts,
@@ -323,6 +344,7 @@ export const CONCEPTS: Concept[] = [
   ...canaryConcepts,
   ...metricConcepts,
   ...formulaConcepts,
+  ...insightConcepts,
 ];
 
 const BY_SLUG = new Map(CONCEPTS.map((c) => [c.slug, c]));
@@ -344,4 +366,5 @@ export const conceptSlug = {
   lifecycle: (state: string) => `lifecycle-${state.toLowerCase().replace(/_/g, '-')}`,
   signalType: (type: string) => `signal-${type.toLowerCase().replace(/_/g, '-')}`,
   severity: (sev: string) => `severity-${sev.toLowerCase()}`,
+  insight: (cat: string) => `insight-${cat.toLowerCase().replace(/_/g, '-')}`,
 };

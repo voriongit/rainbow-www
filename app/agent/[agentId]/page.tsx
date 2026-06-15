@@ -30,6 +30,7 @@ import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { InfoLink } from '../../components/info-link';
 import { Panel, EmptyState } from '../../components/panel';
 import { SignalLog } from '../../components/signal-log';
+import { InsightsPanel } from '../../components/panels/insights-panel';
 import { LineChart } from '../../components/charts/line-chart';
 
 export const dynamic = 'force-dynamic';
@@ -135,6 +136,13 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
           · window {window} · score {fmtNum(info.score)} · {info.signalCount} lifetime signals
         </p>
       </header>
+
+      {/* Insights for this agent */}
+      <InsightsPanel
+        insights={d.insights}
+        window={window}
+        subtitle={`${agentId} · rule-based findings · last ${window}`}
+      />
 
       {/* Primary panels */}
       <div className="grid gap-6 lg:grid-cols-3">

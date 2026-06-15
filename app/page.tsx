@@ -20,6 +20,7 @@ import { TierDistributionPanel } from './components/panels/tier-distribution-pan
 import { FleetPanel } from './components/panels/fleet-panel';
 import { FactorHealthPanel } from './components/panels/factor-health-panel';
 import { TransitionsPanel } from './components/panels/transitions-panel';
+import { InsightsPanel } from './components/panels/insights-panel';
 import { InfoLink } from './components/info-link';
 import { ExploreLink } from './components/explore-link';
 
@@ -122,6 +123,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           sub={data.fleet.anomalyClusters.length > 0 ? 'attention required' : 'none detected'}
         />
       </div>
+
+      {/* Insights — what to look at, for the selected agent */}
+      <InsightsPanel
+        insights={data.insights}
+        window={data.duration}
+        subtitle={`${data.agentId} · rule-based findings · last ${data.duration}`}
+      />
 
       {/* Primary panels */}
       <div className="grid gap-6 lg:grid-cols-3">
