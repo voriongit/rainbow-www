@@ -3,7 +3,44 @@
 
 import type { Metadata } from 'next';
 import { Analytics } from '@vercel/analytics/next';
+import { TRUST_FACTORS } from '@vorionsys/basis-spec';
 import './globals.css';
+import { getAgents } from './lib/data-source';
+import { CONCEPTS } from './lib/glossary';
+import { TIER_ORDER, tierName } from './lib/tiers';
+import { CommandPalette, type CommandItem } from './components/command-palette';
+
+/** Build the global command-palette index (server-side, from live + canonical data). */
+function buildCommandItems(): CommandItem[] {
+  const pages: CommandItem[] = [
+    { kind: 'page', label: 'Dashboard', href: '/' },
+    { kind: 'page', label: 'Concepts glossary', href: '/concepts' },
+    { kind: 'page', label: 'Compare agents', href: '/compare' },
+  ];
+  const agents: CommandItem[] = getAgents().map((a) => ({
+    kind: 'agent',
+    label: a.agentId,
+    sublabel: `${a.label} · ${a.tier}`,
+    href: `/agent/${a.agentId}`,
+  }));
+  const tiers: CommandItem[] = TIER_ORDER.map((t) => ({
+    kind: 'tier',
+    label: `${t} · ${tierName(t)}`,
+    href: `/tier/${t}`,
+  }));
+  const factors: CommandItem[] = Object.entries(TRUST_FACTORS).map(([code, spec]) => ({
+    kind: 'factor',
+    label: `${code} · ${(spec as { name: string }).name}`,
+    href: `/factor/${code}`,
+  }));
+  const concepts: CommandItem[] = CONCEPTS.map((c) => ({
+    kind: 'concept',
+    label: c.term,
+    sublabel: c.category,
+    href: `/concepts/${c.slug}`,
+  }));
+  return [...pages, ...agents, ...tiers, ...factors, ...concepts];
+}
 
 export const metadata: Metadata = {
   title: 'RAINBOW — Trust Analytics Observatory — Vorion',
@@ -43,6 +80,7 @@ export default function RootLayout({
       </head>
       <body className="bg-[#05050a] text-white antialiased font-sans">
         {children}
+        <CommandPalette items={buildCommandItems()} />
         <Analytics />
       </body>
     </html>

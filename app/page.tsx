@@ -9,7 +9,12 @@
  * no browser storage). There are no mutation paths to trust data.
  */
 
-import { getDashboardData, PRESET_DURATIONS } from './lib/data-source';
+import {
+  getDashboardData,
+  getFleetInsights,
+  getFleetSparklines,
+  PRESET_DURATIONS,
+} from './lib/data-source';
 import { fmtDateTime, fmtNum } from './lib/format';
 import { WindowSelector } from './components/window-selector';
 import { AgentSelector } from './components/agent-selector';
@@ -23,6 +28,7 @@ import { TransitionsPanel } from './components/panels/transitions-panel';
 import { InsightsPanel } from './components/panels/insights-panel';
 import { InfoLink } from './components/info-link';
 import { ExploreLink } from './components/explore-link';
+import { CopyLink } from './components/copy-link';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +39,9 @@ interface PageProps {
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const data = getDashboardData(params.window, params.agent);
+  const fleetInsights = getFleetInsights(params.window);
+  const sparklines: Record<string, { t: number; v: number }[]> = {};
+  for (const s of getFleetSparklines(params.window)) sparklines[s.agentId] = s.points;
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -79,6 +88,17 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             >
               Concepts ↗
             </ExploreLink>
+            <ExploreLink
+              href="/compare"
+              className="text-xs text-white/45"
+              title="Compare two agents side by side"
+            >
+              Compare ↗
+            </ExploreLink>
+            <CopyLink />
+            <span className="text-[11px] text-white/30" title="Press ⌘K (or Ctrl-K) to search">
+              ⌘K
+            </span>
           </div>
         </div>
 
@@ -124,11 +144,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
       </div>
 
-      {/* Insights — what to look at, for the selected agent */}
+      {/* Insights — fleet-wide overview of what to look at */}
       <InsightsPanel
-        insights={data.insights}
+        insights={fleetInsights}
         window={data.duration}
-        subtitle={`${data.agentId} · rule-based findings · last ${data.duration}`}
+        subtitle={`Fleet-wide · all agents · last ${data.duration}`}
       />
 
       {/* Primary panels */}
@@ -164,6 +184,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         agents={data.agents}
         selectedAgentId={data.agentId}
         duration={data.duration}
+        sparklines={sparklines}
       />
 
       <FactorHealthPanel state={data.state} duration={data.duration} />

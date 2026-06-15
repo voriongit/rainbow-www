@@ -275,3 +275,36 @@ export function getTierMembers(tierKey: string): SimAgentInfo[] {
   sim.ensureUpTo(new Date());
   return sim.agents().filter((a) => a.tier === tierKey);
 }
+
+export interface AgentSparkline {
+  agentId: string;
+  /** Downsampled score trajectory for an inline sparkline (≤ 24 points). */
+  points: { t: number; v: number }[];
+}
+
+/** A compact score trajectory per agent, for fleet-roster sparklines. */
+export function getFleetSparklines(durationRaw?: string): AgentSparkline[] {
+  const { sim, rainbow } = getSource();
+  const now = new Date();
+  sim.ensureUpTo(now);
+  const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
+  return sim.agents().map((a) => {
+    const samples = rainbow.computeAnalyticsWindow({ duration, agentId: a.agentId }, now).trajectory
+      .samples;
+    const step = Math.max(1, Math.ceil(samples.length / 24));
+    const points = samples
+      .filter((_, i) => i % step === 0 || i === samples.length - 1)
+      .map((p) => ({ t: p.timestamp.getTime(), v: p.score }));
+    return { agentId: a.agentId, points };
+  });
+}
+
+/** Rule-based insights derived from the FLEET-WIDE window (all agents). */
+export function getFleetInsights(durationRaw?: string): RecordedInsight[] {
+  const { sim, rainbow } = getSource();
+  const now = new Date();
+  sim.ensureUpTo(now);
+  const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
+  const fleetWindow = rainbow.computeAnalyticsWindow({ duration }, now);
+  return rainbow.getInsights(fleetWindow, now);
+}

@@ -6,7 +6,7 @@ import { Panel, EmptyState } from '../panel';
 import { BarChart } from '../charts/bar-chart';
 import { exploreHref } from '../explore-link';
 import { fmtNum } from '../../lib/format';
-import { TIER_COLORS, TIER_ORDER, tierName } from '../../lib/tiers';
+import { TIER_COLORS, TIER_ORDER, tierName, tierKeyForScore } from '../../lib/tiers';
 
 interface TierDistributionPanelProps {
   fleet: FleetDistribution;
@@ -48,6 +48,26 @@ export function TierDistributionPanel({ fleet, duration }: TierDistributionPanel
               <p className="text-sm font-bold text-white/90">{fmtNum(fleet.standardDeviation)}</p>
             </div>
           </div>
+
+          {fleet.scoreHistogram.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] uppercase tracking-wider text-white/40">
+                Score histogram
+              </p>
+              <BarChart
+                dense
+                height={120}
+                bars={fleet.scoreHistogram.map((b) => {
+                  const tier = tierKeyForScore(b.bucketMin);
+                  return {
+                    label: String(b.bucketMin),
+                    value: b.count,
+                    color: TIER_COLORS[tier],
+                  };
+                })}
+              />
+            </div>
+          )}
         </div>
       )}
     </Panel>
