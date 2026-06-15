@@ -5,6 +5,8 @@ import type { OrchestrationSnapshot } from '@vorionsys/rainbow';
 import { AlertTriangle } from 'lucide-react';
 import { Panel, EmptyState } from '../panel';
 import { ExploreLink, exploreHref } from '../explore-link';
+import { ConceptTooltip } from '../tooltip';
+import { conceptSlug } from '../../lib/glossary';
 import { fmtNum } from '../../lib/format';
 import { TIER_COLORS, type TierKey } from '../../lib/tiers';
 import type { SimAgentInfo } from '../../lib/simulator';
@@ -131,25 +133,29 @@ export function FleetPanel({ fleet, agents, selectedAgentId, duration }: FleetPa
                         </ExploreLink>
                       </td>
                       <td className="py-2 pr-3">
-                        <ExploreLink
-                          href={exploreHref(`/tier/${agent.tier}`, { window: duration })}
-                          title={`Tier ${agent.tier}`}
-                        >
-                          <span
-                            className="rounded px-1.5 py-0.5 text-[10px] font-bold"
-                            style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
+                        <ConceptTooltip slug={conceptSlug.tier(agent.tier)}>
+                          <ExploreLink
+                            href={exploreHref(`/tier/${agent.tier}`, { window: duration })}
+                            title={`Tier ${agent.tier}`}
                           >
-                            {agent.tier}
-                          </span>
-                        </ExploreLink>
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                              style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
+                            >
+                              {agent.tier}
+                            </span>
+                          </ExploreLink>
+                        </ConceptTooltip>
                       </td>
                       <td className="py-2 pr-3 text-right font-semibold text-white/85">
                         {fmtNum(agent.score)}
                       </td>
                       <td className="py-2 pr-3">
-                        <span className="text-[11px]" style={{ color: lifecycleColor }}>
-                          {agent.lifecycleState}
-                        </span>
+                        <ConceptTooltip slug={conceptSlug.lifecycle(agent.lifecycleState)}>
+                          <span className="text-[11px]" style={{ color: lifecycleColor }}>
+                            {agent.lifecycleState}
+                          </span>
+                        </ConceptTooltip>
                       </td>
                       <td className="py-2 pr-3 text-right text-white/55">
                         <ExploreLink

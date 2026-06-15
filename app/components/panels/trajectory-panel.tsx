@@ -7,6 +7,8 @@ import { Panel, EmptyState } from '../panel';
 import { LineChart } from '../charts/line-chart';
 import { ExploreLink, exploreHref } from '../explore-link';
 import { InfoLink } from '../info-link';
+import { ConceptTooltip } from '../tooltip';
+import { conceptSlug } from '../../lib/glossary';
 import { fmtNum, fmtSigned } from '../../lib/format';
 import { TIER_COLORS, tierKeyForScore, tierName } from '../../lib/tiers';
 
@@ -33,14 +35,16 @@ export function TrajectoryPanel({ trajectory, agentId, duration }: TrajectoryPan
       title="Score trajectory"
       subtitle={`${agentId} · last ${duration}`}
       badge={
-        <ExploreLink href={exploreHref(`/tier/${tier}`, { window: duration })} title={`Explore tier ${tier}`}>
-          <span
-            className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-            style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
-          >
-            {tier} · {tierName(tier)}
-          </span>
-        </ExploreLink>
+        <ConceptTooltip slug={conceptSlug.tier(tier)} side="bottom">
+          <ExploreLink href={exploreHref(`/tier/${tier}`, { window: duration })} title={`Explore tier ${tier}`}>
+            <span
+              className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+              style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
+            >
+              {tier} · {tierName(tier)}
+            </span>
+          </ExploreLink>
+        </ConceptTooltip>
       }
     >
       {trajectory.samples.length === 0 ? (

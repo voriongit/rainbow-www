@@ -11,9 +11,11 @@
 
 import type { IngestedSignal } from '@vorionsys/rainbow';
 import { ExploreLink, exploreHref } from './explore-link';
+import { ConceptTooltip } from './tooltip';
 import { EmptyState } from './panel';
 import { fmtDateTime, fmtSigned, fmtNum } from '../lib/format';
 import { SEVERITY_COLORS, STATUS, tint } from '../lib/status-colors';
+import { conceptSlug } from '../lib/glossary';
 
 interface SignalLogProps {
   signals: IngestedSignal[];
@@ -58,12 +60,14 @@ export function SignalLog({ signals, window, limit = 200, emptyLabel }: SignalLo
                 <td className="py-1.5 pr-3 tabular-nums text-white/55">{fmtDateTime(s.timestamp)}</td>
                 <td className="py-1.5 pr-3 font-mono text-[11px]">
                   {s.busSignalType ? (
-                    <ExploreLink
-                      href={exploreHref(`/signal-type/${s.busSignalType}`, { window })}
-                      className="text-white/80"
-                    >
-                      {s.busSignalType}
-                    </ExploreLink>
+                    <ConceptTooltip slug={conceptSlug.signalType(s.busSignalType)}>
+                      <ExploreLink
+                        href={exploreHref(`/signal-type/${s.busSignalType}`, { window })}
+                        className="text-white/80"
+                      >
+                        {s.busSignalType}
+                      </ExploreLink>
+                    </ConceptTooltip>
                   ) : (
                     <span className="text-white/30">—</span>
                   )}
@@ -76,12 +80,14 @@ export function SignalLog({ signals, window, limit = 200, emptyLabel }: SignalLo
                 </td>
                 <td className="py-1.5 pr-3">
                   {s.severity && sev ? (
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                      style={{ color: sev, backgroundColor: tint(sev) }}
-                    >
-                      {s.severity}
-                    </span>
+                    <ConceptTooltip slug={conceptSlug.severity(s.severity)}>
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                        style={{ color: sev, backgroundColor: tint(sev) }}
+                      >
+                        {s.severity}
+                      </span>
+                    </ConceptTooltip>
                   ) : (
                     <span className="text-white/30">—</span>
                   )}
@@ -97,9 +103,11 @@ export function SignalLog({ signals, window, limit = 200, emptyLabel }: SignalLo
                 </td>
                 <td className="py-1.5 pr-3">
                   {s.riskLevel ? (
-                    <ExploreLink href={exploreHref(`/risk/${s.riskLevel}`, { window })} className="text-white/70">
-                      {s.riskLevel}
-                    </ExploreLink>
+                    <ConceptTooltip slug={conceptSlug.risk(s.riskLevel)}>
+                      <ExploreLink href={exploreHref(`/risk/${s.riskLevel}`, { window })} className="text-white/70">
+                        {s.riskLevel}
+                      </ExploreLink>
+                    </ConceptTooltip>
                   ) : (
                     <span className="text-white/30">—</span>
                   )}

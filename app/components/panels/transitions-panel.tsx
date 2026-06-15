@@ -5,6 +5,7 @@ import type { StateTransitionSummary, SignalDistribution } from '@vorionsys/rain
 import { Panel } from '../panel';
 import { ExploreLink, exploreHref } from '../explore-link';
 import { InfoLink } from '../info-link';
+import { ConceptTooltip } from '../tooltip';
 import { conceptSlug } from '../../lib/glossary';
 import { fmtPct } from '../../lib/format';
 
@@ -110,15 +111,16 @@ export function TransitionsPanel({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(distribution.bySeverity).map(([severity, count]) => (
-                <ExploreLink
-                  key={severity}
-                  href={exploreHref(`/concepts/${conceptSlug.severity(severity)}`, { window: duration })}
-                  variant="block"
-                  className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-white/60"
-                  title={`What does ${severity} severity mean?`}
-                >
-                  {severity}: {count}
-                </ExploreLink>
+                <ConceptTooltip key={severity} slug={conceptSlug.severity(severity)}>
+                  <ExploreLink
+                    href={exploreHref(`/concepts/${conceptSlug.severity(severity)}`, { window: duration })}
+                    variant="block"
+                    className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-white/60"
+                    title={`What does ${severity} severity mean?`}
+                  >
+                    {severity}: {count}
+                  </ExploreLink>
+                </ConceptTooltip>
               ))}
             </div>
           </div>
