@@ -37,6 +37,8 @@ import {
   computeCorrectedRiskTrend,
   RISK_SEED_WINDOW_MS,
 } from './corrected-risk-trend';
+import { CrossAgentCorrelator } from './cross-agent-correlator';
+import { DelegationService } from './delegation-service';
 
 /** Demo seed — fixed so every cold start tells the same relative story */
 const SEED = 20260606;
@@ -323,75 +325,11 @@ export function getFleetInsights(durationRaw?: string): RecordedInsight[] {
   return rainbow.getInsights(fleetWindow, now);
 }
 
-/** Deterministic FNV-1a hash for stable synthetic choices. */
-function hash(str: string): number {
-  let h = 2166136261;
-  for (let k = 0; k < str.length; k++) {
-    h ^= str.charCodeAt(k);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
+const correlator = new CrossAgentCorrelator();
 
-/**
- * HONEST cross-agent correlation: alerts derived purely from real co-occurrence
- * in the (synthetic) signal stream — no fabricated data. Two patterns:
- *   • shared_factor_failure — ≥2 agents failing the same trust factor in-window
- *   • correlated_incident   — ≥2 agents sharing a correlation id
- */
+/** Cross-agent correlation alerts, via the CrossAgentCorrelator producer. */
 function deriveCorrelationAlerts(signals: IngestedSignal[]): CorrelationAlertInput[] {
-  const alerts: CorrelationAlertInput[] = [];
-
-  const byFactor = new Map<string, { agents: Set<string>; latest: number; count: number }>();
-  for (const s of signals) {
-    if (s.success || s.blocked || !s.factorCode) continue;
-    const e = byFactor.get(s.factorCode) ?? { agents: new Set<string>(), latest: 0, count: 0 };
-    e.agents.add(s.agentId);
-    e.latest = Math.max(e.latest, s.timestamp.getTime());
-    e.count += 1;
-    byFactor.set(s.factorCode, e);
-  }
-  for (const [factor, e] of byFactor) {
-    if (e.agents.size < 2) continue;
-    const agentIds = [...e.agents].sort();
-    alerts.push({
-      alertId: `cf-${factor}`,
-      pattern: 'shared_factor_failure',
-      agentIds,
-      severity: agentIds.length >= 3 ? 'critical' : 'warning',
-      description: `${agentIds.length} agents failing ${factor} (${e.count} failures in window)`,
-      detectedAt: new Date(e.latest),
-    });
-  }
-
-  const byCorr = new Map<
-    string,
-    { agents: Set<string>; latest: number; count: number; sev: 'warning' | 'critical' | 'emergency' }
-  >();
-  for (const s of signals) {
-    if (!s.correlationId) continue;
-    const e =
-      byCorr.get(s.correlationId) ?? { agents: new Set<string>(), latest: 0, count: 0, sev: 'warning' as const };
-    e.agents.add(s.agentId);
-    e.latest = Math.max(e.latest, s.timestamp.getTime());
-    e.count += 1;
-    if (s.severity === 'critical' || s.severity === 'emergency') e.sev = s.severity;
-    byCorr.set(s.correlationId, e);
-  }
-  for (const [corr, e] of byCorr) {
-    if (e.agents.size < 2) continue;
-    const agentIds = [...e.agents].sort();
-    alerts.push({
-      alertId: `ci-${corr}`,
-      pattern: 'correlated_incident',
-      agentIds,
-      severity: e.sev,
-      description: `${agentIds.length} agents in correlated incident "${corr}" (${e.count} signals)`,
-      detectedAt: new Date(e.latest),
-    });
-  }
-
-  return alerts.sort((a, b) => b.detectedAt.getTime() - a.detectedAt.getTime());
+  return correlator.correlate(signals);
 }
 
 export interface DelegationModel {
@@ -401,14 +339,11 @@ export interface DelegationModel {
 }
 
 /**
- * MODELED (illustrative) delegation — for the /lab route ONLY, never the main
- * dashboard. The simulator models trust dynamics, not agent-to-agent
- * delegation, so escalations are SYNTHESIZED from real stress signals
- * (circuit-breaker trips / risk-accumulator crossings): a struggling agent is
- * shown "escalating" to a high-trust handler. The routing is an illustrative
- * orchestration policy, not observed delegation. Agents failing the security
- * factors (CT-SEC/CT-ID) are routed entirely to one handler to demonstrate the
- * library's collusion-risk detection.
+ * Delegation health via the DelegationService producer (see its module header).
+ * The trust simulator models trust dynamics, not agent-to-agent delegation, so
+ * the DelegationService is a synthetic delegation MODEL fed by real stress
+ * signals on the bus. Surfaced only on the explicitly-labeled /lab route, never
+ * the main dashboard.
  */
 export function getDelegationModel(durationRaw?: string): DelegationModel {
   const { sim, rainbow } = getSource();
@@ -417,45 +352,9 @@ export function getDelegationModel(durationRaw?: string): DelegationModel {
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const signals = rainbow.collector.queryAll(from, now);
-  const agents = sim.agents();
-
-  const handlers = agents
-    .slice()
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((a) => a.agentId);
-  const topHandler = handlers[0] ?? agents[0]?.agentId ?? 'atlas-01';
-
-  const compromised = new Set<string>();
-  for (const s of signals) {
-    if (!s.success && !s.blocked && (s.factorCode === 'CT-SEC' || s.factorCode === 'CT-ID')) {
-      compromised.add(s.agentId);
-    }
-  }
-
-  const STRESS = new Set([
-    'circuit_breaker_tripped',
-    'risk_accumulator_degraded',
-    'risk_accumulator_warning',
-  ]);
-  const escalations: EscalationEvent[] = [];
-  let i = 0;
-  for (const s of signals) {
-    if (!s.busSignalType || !STRESS.has(s.busSignalType)) continue;
-    const requestorId = s.agentId;
-    let handlerId = compromised.has(requestorId)
-      ? topHandler
-      : handlers[(hash(requestorId) + i) % Math.max(1, handlers.length)] ?? topHandler;
-    if (handlerId === requestorId) handlerId = topHandler === requestorId ? (handlers[1] ?? topHandler) : topHandler;
-    escalations.push({
-      requestorId,
-      handlerId,
-      success: s.busSignalType !== 'circuit_breaker_tripped',
-      resolutionTimeMs: 60_000 + (hash(s.signalId) % 540_000),
-      timestamp: s.timestamp,
-    });
-    i++;
-  }
-
-  return { escalations, summary: computeDelegationHealth(escalations), handlers };
+  const service = new DelegationService(
+    sim.agents().map((a) => ({ agentId: a.agentId, score: a.score, tier: a.tier }))
+  );
+  const escalations = service.escalations(signals);
+  return { escalations, summary: computeDelegationHealth(escalations), handlers: service.handlerPool() };
 }
