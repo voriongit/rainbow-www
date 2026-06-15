@@ -28,10 +28,9 @@ import {
   RISK_LEVELS,
   RISK_ACCUMULATOR,
   CIRCUIT_BREAKER,
-  CANARY_FACTOR_MAPPING,
-  CANARY_RISK_MAPPING,
   QUALIFICATION_PASS_SCORE,
-} from '@vorionsys/basis';
+} from '@vorionsys/basis-spec';
+import { CANARY_FACTOR_MAPPING, CANARY_RISK_MAPPING } from './canary-map';
 import type { IngestedSignal } from '@vorionsys/rainbow';
 import { SIG, SEV, type BusSignalType, type BusSeverity } from './bus-enums';
 import { tierIndexForScore, tierKeyForScore } from './tiers';

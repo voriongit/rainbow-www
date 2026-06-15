@@ -24,7 +24,7 @@ import {
   PENALTY_RATIO_MAX,
   RISK_ACCUMULATOR,
   RISK_LEVELS,
-} from '@vorionsys/basis';
+} from '@vorionsys/basis-spec';
 import type { IngestedSignal, RiskTrend, RiskEscalation } from '@vorionsys/rainbow';
 
 const ACCUMULATOR_WINDOW_MS = RISK_ACCUMULATOR.windowHours * 3_600_000;

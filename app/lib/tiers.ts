@@ -6,7 +6,7 @@
  * `@vorionsys/basis` TRUST_TIERS; only the colors are presentation-local.
  */
 
-import { TRUST_TIERS } from '@vorionsys/basis';
+import { TRUST_TIERS } from '@vorionsys/basis-spec';
 
 export type TierKey = keyof typeof TRUST_TIERS;
 

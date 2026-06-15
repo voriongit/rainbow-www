@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 Vorion LLC
 
-import { RISK_ACCUMULATOR } from '@vorionsys/basis';
+import { RISK_ACCUMULATOR } from '@vorionsys/basis-spec';
 import type { RiskTrend } from '@vorionsys/rainbow';
 import { Panel, EmptyState } from '../panel';
 import { LineChart } from '../charts/line-chart';
