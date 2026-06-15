@@ -26,6 +26,7 @@ import { FleetPanel } from './components/panels/fleet-panel';
 import { FactorHealthPanel } from './components/panels/factor-health-panel';
 import { TransitionsPanel } from './components/panels/transitions-panel';
 import { InsightsPanel } from './components/panels/insights-panel';
+import { CorrelationsPanel } from './components/panels/correlations-panel';
 import { InfoLink } from './components/info-link';
 import { ExploreLink } from './components/explore-link';
 import { CopyLink } from './components/copy-link';
@@ -94,6 +95,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               title="Compare two agents side by side"
             >
               Compare ↗
+            </ExploreLink>
+            <ExploreLink
+              href="/lab"
+              className="text-xs text-white/45"
+              title="Modeled / illustrative views (delegation health)"
+            >
+              Lab ↗
             </ExploreLink>
             <CopyLink />
             <span className="text-[11px] text-white/30" title="Press ⌘K (or Ctrl-K) to search">
@@ -186,6 +194,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         duration={data.duration}
         sparklines={sparklines}
       />
+
+      <CorrelationsPanel correlations={data.fleet.correlations} window={data.duration} />
 
       <FactorHealthPanel state={data.state} duration={data.duration} />
 
