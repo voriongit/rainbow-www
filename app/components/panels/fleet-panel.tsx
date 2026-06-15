@@ -4,6 +4,7 @@
 import type { OrchestrationSnapshot } from '@vorionsys/rainbow';
 import { AlertTriangle } from 'lucide-react';
 import { Panel, EmptyState } from '../panel';
+import { ExploreLink, exploreHref } from '../explore-link';
 import { fmtNum } from '../../lib/format';
 import { TIER_COLORS, type TierKey } from '../../lib/tiers';
 import type { SimAgentInfo } from '../../lib/simulator';
@@ -12,6 +13,7 @@ interface FleetPanelProps {
   fleet: OrchestrationSnapshot;
   agents: SimAgentInfo[];
   selectedAgentId: string;
+  duration: string;
 }
 
 const CLUSTER_COLORS = {
@@ -27,7 +29,7 @@ const LIFECYCLE_COLORS: Record<string, string> = {
 };
 
 /** Fleet roster + cross-agent anomaly clusters */
-export function FleetPanel({ fleet, agents, selectedAgentId }: FleetPanelProps) {
+export function FleetPanel({ fleet, agents, selectedAgentId, duration }: FleetPanelProps) {
   return (
     <Panel
       title="Fleet view"
@@ -52,13 +54,40 @@ export function FleetPanel({ fleet, agents, selectedAgentId }: FleetPanelProps) 
                   style={{ borderColor: `${color}55`, backgroundColor: `${color}0d` }}
                 >
                   <AlertTriangle size={16} style={{ color }} className="mt-0.5 shrink-0" aria-hidden />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-semibold" style={{ color }}>
-                      {cluster.severity.toUpperCase()} — {cluster.description}
+                      <ExploreLink
+                        href={exploreHref(`/cluster/${cluster.clusterId}`, { window: duration })}
+                        title="Open cluster detail"
+                      >
+                        {cluster.severity.toUpperCase()} — {cluster.description}
+                      </ExploreLink>
                     </p>
                     <p className="mt-1 text-[11px] text-white/55">
-                      Agents: {cluster.agentIds.join(', ')} · Shared failing factors:{' '}
-                      {cluster.commonFactors.join(', ')}
+                      Agents:{' '}
+                      {cluster.agentIds.map((id, i) => (
+                        <span key={id}>
+                          {i > 0 ? ', ' : ''}
+                          <ExploreLink
+                            href={exploreHref(`/agent/${id}`, { window: duration })}
+                            className="text-white/70"
+                          >
+                            {id}
+                          </ExploreLink>
+                        </span>
+                      ))}
+                      {' · '}Shared failing factors:{' '}
+                      {cluster.commonFactors.map((code, i) => (
+                        <span key={code}>
+                          {i > 0 ? ', ' : ''}
+                          <ExploreLink
+                            href={exploreHref(`/factor/${code}`, { window: duration })}
+                            className="font-mono text-white/70"
+                          >
+                            {code}
+                          </ExploreLink>
+                        </span>
+                      ))}
                     </p>
                   </div>
                 </li>
@@ -93,14 +122,26 @@ export function FleetPanel({ fleet, agents, selectedAgentId }: FleetPanelProps) 
                       key={agent.agentId}
                       className={`border-b border-white/5 ${selected ? 'bg-white/[0.04]' : ''}`}
                     >
-                      <td className="py-2 pr-3 font-medium text-white/85">{agent.agentId}</td>
-                      <td className="py-2 pr-3">
-                        <span
-                          className="rounded px-1.5 py-0.5 text-[10px] font-bold"
-                          style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
+                      <td className="py-2 pr-3 font-medium text-white/85">
+                        <ExploreLink
+                          href={exploreHref(`/agent/${agent.agentId}`, { window: duration })}
+                          className="font-medium text-white/85"
                         >
-                          {agent.tier}
-                        </span>
+                          {agent.agentId}
+                        </ExploreLink>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <ExploreLink
+                          href={exploreHref(`/tier/${agent.tier}`, { window: duration })}
+                          title={`Tier ${agent.tier}`}
+                        >
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                            style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
+                          >
+                            {agent.tier}
+                          </span>
+                        </ExploreLink>
                       </td>
                       <td className="py-2 pr-3 text-right font-semibold text-white/85">
                         {fmtNum(agent.score)}
@@ -111,7 +152,13 @@ export function FleetPanel({ fleet, agents, selectedAgentId }: FleetPanelProps) 
                         </span>
                       </td>
                       <td className="py-2 pr-3 text-right text-white/55">
-                        {agent.signalCount}
+                        <ExploreLink
+                          href={exploreHref(`/agent/${agent.agentId}`, { window: duration })}
+                          className="text-white/55"
+                          title="View signal log"
+                        >
+                          {agent.signalCount}
+                        </ExploreLink>
                       </td>
                       <td className="py-2 text-white/45">{agent.label}</td>
                     </tr>

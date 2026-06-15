@@ -4,6 +4,7 @@
 import type { NonBinaryStateSnapshot } from '@vorionsys/rainbow';
 import { TrendingUp, TrendingDown, Minus, Check, X } from 'lucide-react';
 import { Panel, EmptyState } from '../panel';
+import { ExploreLink, exploreHref } from '../explore-link';
 import { fmtPct } from '../../lib/format';
 
 interface FactorHealthPanelProps {
@@ -61,12 +62,19 @@ export function FactorHealthPanel({ state, duration }: FactorHealthPanelProps) {
                       key={factor.factorCode}
                       className={`flex items-center gap-3 ${noEvidence ? 'opacity-50' : ''}`}
                     >
-                      <span className="w-24 shrink-0 truncate text-xs text-white/75">
+                      <ExploreLink
+                        href={exploreHref(`/factor/${factor.factorCode}`, { window: duration })}
+                        className="w-24 shrink-0 truncate text-xs text-white/75"
+                        title={`Explore factor ${factor.factorCode}`}
+                      >
                         {factor.factorName}
-                      </span>
-                      <span className="w-20 shrink-0 font-mono text-[10px] text-white/35">
+                      </ExploreLink>
+                      <ExploreLink
+                        href={exploreHref(`/factor/${factor.factorCode}`, { window: duration })}
+                        className="w-20 shrink-0 font-mono text-[10px] text-white/35"
+                      >
                         {factor.factorCode}
-                      </span>
+                      </ExploreLink>
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                         {!noEvidence && (
                           <div

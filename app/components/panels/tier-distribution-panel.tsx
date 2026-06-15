@@ -4,19 +4,21 @@
 import type { FleetDistribution } from '@vorionsys/rainbow';
 import { Panel, EmptyState } from '../panel';
 import { BarChart } from '../charts/bar-chart';
+import { exploreHref } from '../explore-link';
 import { fmtNum } from '../../lib/format';
 import { TIER_COLORS, TIER_ORDER, tierName } from '../../lib/tiers';
 
 interface TierDistributionPanelProps {
   fleet: FleetDistribution;
+  duration: string;
 }
 
 /** Fleet distribution across the eight trust tiers */
-export function TierDistributionPanel({ fleet }: TierDistributionPanelProps) {
+export function TierDistributionPanel({ fleet, duration }: TierDistributionPanelProps) {
   return (
     <Panel
       title="Tier distribution"
-      subtitle={`${fleet.totalAgents} agents · current fleet scores`}
+      subtitle={`${fleet.totalAgents} agents · current fleet scores · select a tier to explore`}
     >
       {fleet.totalAgents === 0 ? (
         <EmptyState message="No agents observed." />
@@ -30,6 +32,7 @@ export function TierDistributionPanel({ fleet }: TierDistributionPanelProps) {
               color: TIER_COLORS[tier],
             }))}
             height={185}
+            hrefFor={(b) => exploreHref(`/tier/${b.label}`, { window: duration })}
           />
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">

@@ -3,6 +3,9 @@
 
 import type { StateTransitionSummary, SignalDistribution } from '@vorionsys/rainbow';
 import { Panel } from '../panel';
+import { ExploreLink, exploreHref } from '../explore-link';
+import { InfoLink } from '../info-link';
+import { conceptSlug } from '../../lib/glossary';
 import { fmtPct } from '../../lib/format';
 
 interface TransitionsPanelProps {
@@ -26,11 +29,11 @@ export function TransitionsPanel({
   duration,
 }: TransitionsPanelProps) {
   const counters = [
-    { label: 'Promotions', value: transitions.tierPromotions, color: '#22c55e' },
-    { label: 'Demotions', value: transitions.tierDemotions, color: '#ef4444' },
-    { label: 'CB trips', value: transitions.cbTrips, color: '#dc2626' },
-    { label: 'Degraded entries', value: transitions.cbDegradedEntries, color: '#f59e0b' },
-    { label: 'CB resets', value: transitions.cbResets, color: '#06b6d4' },
+    { label: 'Promotions', value: transitions.tierPromotions, color: '#22c55e', info: undefined },
+    { label: 'Demotions', value: transitions.tierDemotions, color: '#ef4444', info: undefined },
+    { label: 'CB trips', value: transitions.cbTrips, color: '#dc2626', info: 'formula-circuit-breaker' },
+    { label: 'Degraded entries', value: transitions.cbDegradedEntries, color: '#f59e0b', info: 'formula-risk-accumulator' },
+    { label: 'CB resets', value: transitions.cbResets, color: '#06b6d4', info: 'formula-circuit-breaker' },
   ];
 
   const total = distribution.total;
@@ -49,7 +52,10 @@ export function TransitionsPanel({
         <div className="grid grid-cols-2 gap-2">
           {counters.map((c) => (
             <div key={c.label} className="rounded-lg bg-white/[0.03] px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wider text-white/40">{c.label}</p>
+              <p className="text-[10px] uppercase tracking-wider text-white/40">
+                {c.label}
+                {c.info ? <InfoLink slug={c.info} label={c.label} /> : null}
+              </p>
               <p className="text-lg font-bold" style={{ color: c.value > 0 ? c.color : '#ffffff59' }}>
                 {c.value}
               </p>
@@ -104,12 +110,15 @@ export function TransitionsPanel({
             </p>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(distribution.bySeverity).map(([severity, count]) => (
-                <span
+                <ExploreLink
                   key={severity}
+                  href={exploreHref(`/concepts/${conceptSlug.severity(severity)}`, { window: duration })}
+                  variant="block"
                   className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-white/60"
+                  title={`What does ${severity} severity mean?`}
                 >
                   {severity}: {count}
-                </span>
+                </ExploreLink>
               ))}
             </div>
           </div>

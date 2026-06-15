@@ -25,6 +25,7 @@ import {
   type OrchestrationSnapshot,
   type NonBinaryStateSnapshot,
   type RiskTrend,
+  type IngestedSignal,
 } from '@vorionsys/rainbow';
 import { FleetSimulator, type SimAgentInfo } from './simulator';
 import {
@@ -189,4 +190,81 @@ export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
     { duration },
     now
   );
+}
+
+/**
+ * Raw signal log for one agent within the window — the deepest real detail in
+ * the system, newest first. Backs the drill-down "event log" tables. Optional
+ * predicates filter to a factor, bus type, severity, risk level, or outcome.
+ */
+export function getAgentSignals(
+  agentId: string,
+  durationRaw?: string,
+  filter?: {
+    factorCode?: string;
+    busSignalType?: string;
+    severity?: string;
+    riskLevel?: string;
+    outcome?: 'success' | 'failure' | 'blocked';
+  }
+): IngestedSignal[] {
+  const { sim, rainbow } = getSource();
+  const now = new Date();
+  sim.ensureUpTo(now);
+  const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
+  const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
+  let signals = rainbow.collector.query(agentId, from, now);
+  if (filter) {
+    signals = signals.filter((s) => {
+      if (filter.factorCode && s.factorCode !== filter.factorCode) return false;
+      if (filter.busSignalType && s.busSignalType !== filter.busSignalType) return false;
+      if (filter.severity && s.severity !== filter.severity) return false;
+      if (filter.riskLevel && s.riskLevel !== filter.riskLevel) return false;
+      if (filter.outcome === 'blocked' && !s.blocked) return false;
+      if (filter.outcome === 'success' && !(s.success && !s.blocked)) return false;
+      if (filter.outcome === 'failure' && !(!s.success && !s.blocked)) return false;
+      return true;
+    });
+  }
+  return signals.slice().sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+}
+
+/** Fleet-wide signal log within the window (newest first), with the same filters. */
+export function getFleetSignals(
+  durationRaw?: string,
+  filter?: Parameters<typeof getAgentSignals>[2]
+): IngestedSignal[] {
+  const { sim, rainbow } = getSource();
+  const now = new Date();
+  sim.ensureUpTo(now);
+  const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
+  const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
+  let signals = rainbow.collector.queryAll(from, now);
+  if (filter) {
+    signals = signals.filter((s) => {
+      if (filter.factorCode && s.factorCode !== filter.factorCode) return false;
+      if (filter.busSignalType && s.busSignalType !== filter.busSignalType) return false;
+      if (filter.severity && s.severity !== filter.severity) return false;
+      if (filter.riskLevel && s.riskLevel !== filter.riskLevel) return false;
+      if (filter.outcome === 'blocked' && !s.blocked) return false;
+      if (filter.outcome === 'success' && !(s.success && !s.blocked)) return false;
+      if (filter.outcome === 'failure' && !(!s.success && !s.blocked)) return false;
+      return true;
+    });
+  }
+  return signals.slice().sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+}
+
+/** One agent's roster info (or undefined if unknown). */
+export function getAgentInfo(agentId: string): SimAgentInfo | undefined {
+  const { sim } = getSource();
+  sim.ensureUpTo(new Date());
+  return sim.agents().find((a) => a.agentId === agentId);
+}
+
+/** Agents currently resolving to a given tier key (T0–T7). */
+export function getTierMembers(tierKey: string): SimAgentInfo[] {
+  const { sim } = getSource();
+  sim.ensureUpTo(new Date());
+  return sim.agents().filter((a) => a.tier === tierKey);
 }

@@ -18,12 +18,14 @@ interface BarChartProps {
   height?: number;
   /** Hide per-bar value labels (dense histograms) */
   dense?: boolean;
+  /** When provided and it returns a URL, the bar becomes a drill-down link. */
+  hrefFor?: (bar: Bar) => string | undefined;
 }
 
 const W = 640;
 const PAD = { top: 16, right: 8, bottom: 34, left: 8 };
 
-export function BarChart({ bars, height = 190, dense = false }: BarChartProps) {
+export function BarChart({ bars, height = 190, dense = false, hrefFor }: BarChartProps) {
   if (bars.length === 0) return null;
 
   const H = height;
@@ -39,8 +41,8 @@ export function BarChart({ bars, height = 190, dense = false }: BarChartProps) {
         const cx = PAD.left + slot * i + slot / 2;
         const h = (b.value / max) * innerH;
         const yTop = PAD.top + innerH - h;
-        return (
-          <g key={b.label}>
+        const inner = (
+          <>
             <rect
               x={cx - barW / 2}
               y={yTop}
@@ -51,40 +53,32 @@ export function BarChart({ bars, height = 190, dense = false }: BarChartProps) {
               fillOpacity="0.85"
             />
             {!dense && b.value > 0 && (
-              <text
-                x={cx}
-                y={yTop - 5}
-                textAnchor="middle"
-                fontSize="11"
-                fill="#ffffff"
-                fillOpacity="0.85"
-              >
+              <text x={cx} y={yTop - 5} textAnchor="middle" fontSize="11" fill="#ffffff" fillOpacity="0.85">
                 {b.value}
               </text>
             )}
-            <text
-              x={cx}
-              y={H - 20}
-              textAnchor="middle"
-              fontSize={dense ? 8 : 11}
-              fill="#ffffff"
-              fillOpacity="0.6"
-            >
+            <text x={cx} y={H - 20} textAnchor="middle" fontSize={dense ? 8 : 11} fill="#ffffff" fillOpacity="0.6">
               {b.label}
             </text>
             {b.sublabel && (
-              <text
-                x={cx}
-                y={H - 8}
-                textAnchor="middle"
-                fontSize="8"
-                fill="#ffffff"
-                fillOpacity="0.35"
-              >
+              <text x={cx} y={H - 8} textAnchor="middle" fontSize="8" fill="#ffffff" fillOpacity="0.35">
                 {b.sublabel}
               </text>
             )}
-          </g>
+          </>
+        );
+        const href = hrefFor?.(b);
+        return href ? (
+          <a
+            key={b.label}
+            href={href}
+            className="cursor-pointer transition-opacity hover:opacity-80"
+            aria-label={`${b.label}${b.sublabel ? ` (${b.sublabel})` : ''}: ${b.value}`}
+          >
+            {inner}
+          </a>
+        ) : (
+          <g key={b.label}>{inner}</g>
         );
       })}
     </svg>

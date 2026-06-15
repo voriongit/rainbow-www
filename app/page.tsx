@@ -20,6 +20,8 @@ import { TierDistributionPanel } from './components/panels/tier-distribution-pan
 import { FleetPanel } from './components/panels/fleet-panel';
 import { FactorHealthPanel } from './components/panels/factor-health-panel';
 import { TransitionsPanel } from './components/panels/transitions-panel';
+import { InfoLink } from './components/info-link';
+import { ExploreLink } from './components/explore-link';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +71,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               current={data.duration}
               agentId={data.agentId}
             />
+            <ExploreLink
+              href="/concepts"
+              className="text-xs text-white/45"
+              title="Browse the concept glossary"
+            >
+              Concepts ↗
+            </ExploreLink>
           </div>
         </div>
 
@@ -87,7 +96,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Fleet agents" value={String(data.fleet.fleet.totalAgents)} />
         <Stat
-          label="Fleet mean score"
+          label={
+            <>
+              Fleet mean score
+              <InfoLink slug="metric-composite-score" />
+            </>
+          }
           value={fmtNum(data.fleet.fleet.averageScore)}
           sub={`median ${fmtNum(data.fleet.fleet.medianScore)}`}
         />
@@ -97,7 +111,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           sub="fleet-wide"
         />
         <Stat
-          label="Anomaly clusters"
+          label={
+            <>
+              Anomaly clusters
+              <InfoLink slug="metric-anomaly-cluster" />
+            </>
+          }
           value={String(data.fleet.anomalyClusters.length)}
           color={data.fleet.anomalyClusters.length > 0 ? '#ef4444' : undefined}
           sub={data.fleet.anomalyClusters.length > 0 ? 'attention required' : 'none detected'}
@@ -113,7 +132,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             duration={data.duration}
           />
         </div>
-        <TierDistributionPanel fleet={data.fleet.fleet} />
+        <TierDistributionPanel fleet={data.fleet.fleet} duration={data.duration} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -132,7 +151,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         />
       </div>
 
-      <FleetPanel fleet={data.fleet} agents={data.agents} selectedAgentId={data.agentId} />
+      <FleetPanel
+        fleet={data.fleet}
+        agents={data.agents}
+        selectedAgentId={data.agentId}
+        duration={data.duration}
+      />
 
       <FactorHealthPanel state={data.state} duration={data.duration} />
 
@@ -163,6 +187,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         </ul>
         <p className="mt-3 text-[11px] text-white/30">
           @vorionsys/rainbow · Vorion AI governance ecosystem ·{' '}
+          <ExploreLink href="/concepts" className="text-white/40">
+            Browse all concepts
+          </ExploreLink>{' '}
+          ·{' '}
           <a href="https://vorion.org" className="underline hover:text-white/60">
             vorion.org
           </a>

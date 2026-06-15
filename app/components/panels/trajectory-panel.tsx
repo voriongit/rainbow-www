@@ -5,6 +5,8 @@ import type { ScoreTrajectory } from '@vorionsys/rainbow';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Panel, EmptyState } from '../panel';
 import { LineChart } from '../charts/line-chart';
+import { ExploreLink, exploreHref } from '../explore-link';
+import { InfoLink } from '../info-link';
 import { fmtNum, fmtSigned } from '../../lib/format';
 import { TIER_COLORS, tierKeyForScore, tierName } from '../../lib/tiers';
 
@@ -31,12 +33,14 @@ export function TrajectoryPanel({ trajectory, agentId, duration }: TrajectoryPan
       title="Score trajectory"
       subtitle={`${agentId} · last ${duration}`}
       badge={
-        <span
-          className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-          style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
-        >
-          {tier} · {tierName(tier)}
-        </span>
+        <ExploreLink href={exploreHref(`/tier/${tier}`, { window: duration })} title={`Explore tier ${tier}`}>
+          <span
+            className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+            style={{ color: tierColor, backgroundColor: `${tierColor}1a` }}
+          >
+            {tier} · {tierName(tier)}
+          </span>
+        </ExploreLink>
       }
     >
       {trajectory.samples.length === 0 ? (
@@ -45,25 +49,37 @@ export function TrajectoryPanel({ trajectory, agentId, duration }: TrajectoryPan
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-5">
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-white/40">Current</p>
+              <p className="text-[11px] uppercase tracking-wider text-white/40">
+                Current
+                <InfoLink slug="metric-composite-score" />
+              </p>
               <p className="text-2xl font-bold" style={{ color: tierColor }}>
                 {fmtNum(trajectory.current)}
               </p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-white/40">Trend</p>
+              <p className="text-[11px] uppercase tracking-wider text-white/40">
+                Trend
+                <InfoLink slug="metric-trajectory" />
+              </p>
               <p className="flex items-center gap-1.5 text-sm font-semibold" style={{ color }}>
                 <Icon size={16} aria-hidden /> {label}
               </p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-white/40">Velocity</p>
+              <p className="text-[11px] uppercase tracking-wider text-white/40">
+                Velocity
+                <InfoLink slug="metric-velocity" />
+              </p>
               <p className="text-sm font-semibold text-white/85">
                 {fmtSigned(trajectory.velocity)} <span className="text-white/40">pts/h</span>
               </p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-white/40">Acceleration</p>
+              <p className="text-[11px] uppercase tracking-wider text-white/40">
+                Acceleration
+                <InfoLink slug="metric-acceleration" />
+              </p>
               <p className="text-sm font-semibold text-white/85">
                 {fmtSigned(trajectory.acceleration, 2)}{' '}
                 <span className="text-white/40">pts/h²</span>
