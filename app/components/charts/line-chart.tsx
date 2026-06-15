@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 Vorion LLC
 
+'use client';
+
 /**
- * Server-rendered SVG line chart — zero client JS.
- * Optional least-squares regression overlay and horizontal threshold lines.
+ * Interactive SVG line chart. The series, area fill, gridlines, thresholds and
+ * optional least-squares regression render server-identically; on top, a
+ * client hover layer tracks the cursor, snaps to the nearest sample, and shows
+ * a crosshair + highlighted point + a floating detail card (value + timestamp).
+ * Keyboard/touch fall back to the static chart gracefully.
  */
 
-import { fmtAxisTime, fmtNum } from '../../lib/format';
+import { useRef, useState } from 'react';
+import { fmtAxisTime, fmtNum, fmtDateTime } from '../../lib/format';
 
 export interface LinePoint {
   /** Timestamp ms */
@@ -31,8 +37,8 @@ interface LineChartProps {
   thresholds?: Threshold[];
   /** Overlay a least-squares regression line */
   regression?: boolean;
-  /** Y-axis tick formatter */
-  formatY?: (v: number) => string;
+  /** Label for the value in the hover card (e.g. "Score", "Accumulator") */
+  valueLabel?: string;
 }
 
 const W = 640;
@@ -46,8 +52,11 @@ export function LineChart({
   yDomain,
   thresholds = [],
   regression = false,
-  formatY = (v) => fmtNum(v),
+  valueLabel = 'Value',
 }: LineChartProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hover, setHover] = useState<number | null>(null);
+
   if (points.length === 0) return null;
 
   const H = height;
@@ -111,103 +120,126 @@ export function LineChart({
   const yTicks = [0, 1, 2, 3].map((i) => yMin + (ySpan * i) / 3);
   const xTicks = [0, 1, 2, 3].map((i) => tMin + (tSpan * i) / 3);
 
+  function onMove(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const d = Math.abs(x(points[i].t) - svgX);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    setHover(best);
+  }
+
+  const hp = hover != null ? points[hover] : null;
+  const hx = hp ? x(hp.t) : 0;
+  const hy = hp ? y(hp.v) : 0;
+  const hLeft = (hx / W) * 100;
+  // Flip the card horizontally near the edges so it stays on-canvas
+  const cardTransform =
+    hLeft > 80 ? 'translate(-100%, -100%)' : hLeft < 20 ? 'translate(0, -100%)' : 'translate(-50%, -100%)';
+
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full"
-      role="img"
-      aria-label="Time-series chart"
-    >
-      <defs>
-        <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        role="img"
+        aria-label="Time-series chart (hover for values)"
+        onMouseMove={onMove}
+        onMouseLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
 
-      {/* Grid + y labels */}
-      {yTicks.map((v) => (
-        <g key={`y-${v}`}>
-          <line
-            x1={PAD.left}
-            x2={W - PAD.right}
-            y1={y(v)}
-            y2={y(v)}
-            stroke="#ffffff"
-            strokeOpacity="0.06"
-          />
-          <text
-            x={PAD.left - 6}
-            y={y(v) + 3}
-            textAnchor="end"
-            fontSize="10"
-            fill="#ffffff"
-            fillOpacity="0.45"
-          >
-            {formatY(v)}
-          </text>
-        </g>
-      ))}
-
-      {/* X labels */}
-      {xTicks.map((t) => (
-        <text
-          key={`x-${t}`}
-          x={x(t)}
-          y={H - 8}
-          textAnchor="middle"
-          fontSize="10"
-          fill="#ffffff"
-          fillOpacity="0.45"
-        >
-          {fmtAxisTime(t, tSpan)}
-        </text>
-      ))}
-
-      {/* Thresholds */}
-      {thresholds
-        .filter((th) => th.value >= yMin && th.value <= yMax)
-        .map((th) => (
-          <g key={th.label}>
-            <line
-              x1={PAD.left}
-              x2={W - PAD.right}
-              y1={y(th.value)}
-              y2={y(th.value)}
-              stroke={th.color}
-              strokeOpacity="0.6"
-              strokeDasharray="5 4"
-            />
-            <text
-              x={W - PAD.right - 4}
-              y={y(th.value) - 4}
-              textAnchor="end"
-              fontSize="9"
-              fill={th.color}
-              fillOpacity="0.9"
-            >
-              {th.label}
+        {/* Grid + y labels */}
+        {yTicks.map((v) => (
+          <g key={`y-${v}`}>
+            <line x1={PAD.left} x2={W - PAD.right} y1={y(v)} y2={y(v)} stroke="#ffffff" strokeOpacity="0.06" />
+            <text x={PAD.left - 6} y={y(v) + 3} textAnchor="end" fontSize="10" fill="#ffffff" fillOpacity="0.45">
+              {fmtNum(v)}
             </text>
           </g>
         ))}
 
-      {/* Series */}
-      <path d={areaPath} fill={`url(#${id}-fill)`} />
-      <path d={path} fill="none" stroke={color} strokeWidth="1.8" />
+        {/* X labels */}
+        {xTicks.map((t) => (
+          <text key={`x-${t}`} x={x(t)} y={H - 8} textAnchor="middle" fontSize="10" fill="#ffffff" fillOpacity="0.45">
+            {fmtAxisTime(t, tSpan)}
+          </text>
+        ))}
 
-      {/* Regression overlay */}
-      {regLine && (
-        <line
-          x1={regLine.x1}
-          y1={regLine.y1}
-          x2={regLine.x2}
-          y2={regLine.y2}
-          stroke="#ffffff"
-          strokeOpacity="0.5"
-          strokeWidth="1.2"
-          strokeDasharray="2 4"
-        />
+        {/* Thresholds */}
+        {thresholds
+          .filter((th) => th.value >= yMin && th.value <= yMax)
+          .map((th) => (
+            <g key={th.label}>
+              <line
+                x1={PAD.left}
+                x2={W - PAD.right}
+                y1={y(th.value)}
+                y2={y(th.value)}
+                stroke={th.color}
+                strokeOpacity="0.6"
+                strokeDasharray="5 4"
+              />
+              <text x={W - PAD.right - 4} y={y(th.value) - 4} textAnchor="end" fontSize="9" fill={th.color} fillOpacity="0.9">
+                {th.label}
+              </text>
+            </g>
+          ))}
+
+        {/* Series */}
+        <path d={areaPath} fill={`url(#${id}-fill)`} />
+        <path d={path} fill="none" stroke={color} strokeWidth="1.8" />
+
+        {/* Regression overlay */}
+        {regLine && (
+          <line
+            x1={regLine.x1}
+            y1={regLine.y1}
+            x2={regLine.x2}
+            y2={regLine.y2}
+            stroke="#ffffff"
+            strokeOpacity="0.5"
+            strokeWidth="1.2"
+            strokeDasharray="2 4"
+          />
+        )}
+
+        {/* Hover crosshair + marker */}
+        {hp && (
+          <g pointerEvents="none">
+            <line x1={hx} x2={hx} y1={PAD.top} y2={PAD.top + innerH} stroke="#ffffff" strokeOpacity="0.25" strokeDasharray="3 3" />
+            <circle cx={hx} cy={hy} r="3.5" fill={color} stroke="#05050a" strokeWidth="1.5" />
+          </g>
+        )}
+      </svg>
+
+      {/* Floating detail card */}
+      {hp && (
+        <div
+          className="pointer-events-none absolute z-20 whitespace-nowrap rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-[11px] shadow-lg"
+          style={{ left: `${hLeft}%`, top: `${(hy / H) * 100}%`, transform: cardTransform, marginTop: '-6px' }}
+        >
+          <div className="font-semibold text-white/90">
+            {valueLabel}: {fmtNum(hp.v, Number.isInteger(hp.v) ? 0 : 1)}
+          </div>
+          <div className="text-white/50">{fmtDateTime(new Date(hp.t))} UTC</div>
+        </div>
       )}
-    </svg>
+    </div>
   );
 }

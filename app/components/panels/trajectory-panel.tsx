@@ -102,6 +102,7 @@ export function TrajectoryPanel({ trajectory, agentId, duration }: TrajectoryPan
             color={tierColor}
             regression
             height={210}
+            valueLabel="Score"
           />
         </div>
       )}

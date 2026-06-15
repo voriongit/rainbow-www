@@ -84,6 +84,7 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
             points={risk.samples.map((s) => ({ t: s.timestamp.getTime(), v: s.value }))}
             color="#f97316"
             height={210}
+            valueLabel="Accumulator"
             yDomain={[0, yMax]}
             thresholds={[
               {

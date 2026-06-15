@@ -193,6 +193,7 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
                   color={tierColor}
                   regression
                   height={210}
+                  valueLabel="Score"
                 />
               </div>
             )}
@@ -249,6 +250,7 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
                 points={risk.samples.map((s) => ({ t: s.timestamp.getTime(), v: s.value }))}
                 color={STATUS.warnAlt}
                 height={210}
+                valueLabel="Accumulator"
                 yDomain={[0, Math.max(risk.peakInWindow * 1.2, 240 * 1.15)]}
                 thresholds={[
                   { value: 60, label: 'warn', color: STATUS.warn },
