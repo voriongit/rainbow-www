@@ -2,11 +2,13 @@
 // Copyright 2024-2026 Vorion LLC
 
 /**
- * Lab — explicitly MODELED / illustrative views that are not part of the
- * honestly-grounded main dashboard. The simulator models trust dynamics, not
- * agent-to-agent delegation, so the delegation-health view here is synthesized
- * from real stress signals routed by an illustrative policy. Kept off the main
- * dashboard on purpose.
+ * Lab — orchestration views that layer one explicit, declared POLICY on top of
+ * the honestly-grounded signal stream. The simulator has no native concept of
+ * agent-to-agent delegation, so this delegation-health view supplies a routing
+ * policy and then DERIVES every outcome from the real simulated trust history
+ * (handler pool, resolution and rejection all come from each handler's actual
+ * trust at the escalation instant). The policy is the one model, so it is kept
+ * off the assumption-free main dashboard on purpose.
  */
 
 import { getDelegationModel, isPresetDuration } from '../lib/data-source';
@@ -30,16 +32,19 @@ function fmtResolution(ms: number): string {
 export default async function LabPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
-  const { escalations, summary, handlers } = getDelegationModel(window);
+  const { escalations, summary, handlers, securityCluster } = getDelegationModel(window);
 
-  // Per-pair collusion flag (mirrors the library's ≥80%-to-one-handler rule).
+  // Per-pair collusion flag: the library's ≥80%-to-one-handler rule, SCOPED to
+  // agents with real CT-SEC/CT-ID failures so the badge reflects the genuine
+  // shared-security cluster, not incidental load-balancing concentration.
+  const cluster = new Set(securityCluster);
   const requestorTotals = new Map<string, number>();
   for (const e of escalations) {
     requestorTotals.set(e.requestorId, (requestorTotals.get(e.requestorId) ?? 0) + 1);
   }
   const isColluding = (requestor: string, count: number) => {
     const total = requestorTotals.get(requestor) ?? 0;
-    return total >= 3 && count / total >= 0.8;
+    return cluster.has(requestor) && total >= 3 && count / total >= 0.8;
   };
 
   const recent = escalations
@@ -54,26 +59,33 @@ export default async function LabPage({ searchParams }: PageProps) {
           ← Dashboard
         </ExploreLink>
         <h1 className="text-2xl font-extrabold tracking-tight">
-          Lab <span className="text-white/50">· modeled views</span>
+          Lab <span className="text-white/50">· derived under a modeled policy</span>
         </h1>
         {/* Honesty disclaimer */}
         <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-4 py-2.5">
           <p className="text-xs leading-relaxed text-amber-200/80">
-            <span className="font-semibold">Illustrative / modeled.</span> Unlike the main
-            dashboard (which is grounded in the simulated signal stream), the simulator does{' '}
-            <em>not</em> model agent-to-agent delegation. The escalations below are{' '}
-            <span className="font-semibold">synthesized</span> from real stress signals
-            (circuit-breaker trips and risk-accumulator crossings) routed by an illustrative
-            policy — a struggling agent is shown escalating to a high-trust handler. This is a
-            demonstration of RAINBOW&apos;s delegation-health detection, <em>not</em> observed
-            delegation. Window: {window}.
+            <span className="font-semibold">Derived — declared orchestration policy.</span> The
+            simulator does <em>not</em> prescribe who handles an escalation, so this view applies
+            one explicit policy on top of the real signal stream: when an agent hits a stress
+            event — a circuit-breaker trip, a risk-accumulator crossing, or a security-factor
+            (CT-SEC / CT-ID) failure — it escalates to the highest-trust handler available{' '}
+            <em>at that moment</em>. No outcome is fabricated: whether it resolves and how fast
+            are <span className="font-semibold">derived</span> from that handler&apos;s actual
+            simulated trust at the time versus the difficulty of the case (severity + how degraded
+            the requestor is). The collusion flag is a three-step chain, not an observed pattern:
+            agents sharing CT-SEC / CT-ID failures are a <em>real</em> signal (the same one the
+            correlation panel surfaces); the policy <em>routes</em> them all to one security lead;
+            that policy-induced concentration — ≥80% of a requestor&apos;s (≥3) escalations to one
+            handler — is what trips the detector. The routing <em>policy</em> is the one model (the
+            simulator has no native delegation), so this stays off the main dashboard. Window:{' '}
+            {window}.
           </p>
         </div>
       </header>
 
       {summary.totalEscalations === 0 ? (
-        <Panel title="Delegation health" subtitle="Modeled escalations in window">
-          <EmptyState message="No stress signals produced modeled escalations in this window." />
+        <Panel title="Delegation health" subtitle="Derived escalations in window">
+          <EmptyState message="No stress signals produced any escalations in this window." />
         </Panel>
       ) : (
         <>
@@ -160,7 +172,7 @@ export default async function LabPage({ searchParams }: PageProps) {
           </Panel>
 
           {/* Escalation log */}
-          <Panel title="Escalation log" subtitle={`Newest ${recent.length} of ${escalations.length} modeled escalations`}>
+          <Panel title="Escalation log" subtitle={`Newest ${recent.length} of ${escalations.length} derived escalations`}>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
