@@ -141,6 +141,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           label={`Signals · ${data.duration}`}
           value={String(data.fleetSignalCount)}
           sub="fleet-wide"
+          tip="Total Trust Signal Bus events emitted across the whole fleet in the selected window."
         />
         <Stat
           label={
