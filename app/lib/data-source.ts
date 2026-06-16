@@ -342,15 +342,20 @@ export interface DelegationModel {
 }
 
 /**
- * Delegation health via the DelegationService producer (see its module header).
- * The simulator has no native delegation, so the service applies one explicit
- * orchestration policy and DERIVES every outcome from the real simulated trust
- * trajectories (handler pool, resolution and rejection all come from each
- * handler's actual trust at the escalation instant via `resolveScoreAt` — no
- * fabrication). The policy itself is the only model, so this is surfaced only on
- * the explicitly-labeled /lab route, never the main dashboard.
+ * Delegation derivation shared by the full /lab model and the dashboard teaser
+ * (see DelegationService's module header). The simulator has no native
+ * delegation, so the service applies one explicit orchestration policy and
+ * DERIVES every outcome from the real simulated trust trajectories (handler
+ * pool, resolution and rejection all come from each handler's actual trust at
+ * the escalation instant via `resolveScoreAt` — no fabrication). The policy
+ * itself is the only model.
  */
-export function getDelegationModel(durationRaw?: string): DelegationModel {
+function buildDelegation(durationRaw?: string): {
+  service: DelegationService;
+  signals: IngestedSignal[];
+  escalations: EscalationEvent[];
+  now: Date;
+} {
   const { sim, rainbow } = getSource();
   const now = new Date();
   sim.ensureUpTo(now);
@@ -361,11 +366,23 @@ export function getDelegationModel(durationRaw?: string): DelegationModel {
     agentIds: sim.agents().map((a) => a.agentId),
     trustAt: (agentId, at) => sim.resolveScoreAt(agentId, at),
   });
-  const escalations = service.escalations(signals);
+  return { service, signals, escalations: service.escalations(signals), now };
+}
+
+/** Full delegation model — escalation log, summary, handler pool and security
+ *  cluster — for the explicitly-labeled /lab route. */
+export function getDelegationModel(durationRaw?: string): DelegationModel {
+  const { service, signals, escalations, now } = buildDelegation(durationRaw);
   return {
     escalations,
     summary: computeDelegationHealth(escalations),
     handlers: service.handlerPoolAt(now),
     securityCluster: service.securityCluster(signals),
   };
+}
+
+/** Just the delegation-health summary, for the dashboard teaser — skips the
+ *  handler-pool and security-cluster derivation the full model returns. */
+export function getDelegationSummary(durationRaw?: string): DelegationHealthSummary {
+  return computeDelegationHealth(buildDelegation(durationRaw).escalations);
 }
