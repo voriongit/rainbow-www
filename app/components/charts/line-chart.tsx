@@ -228,9 +228,10 @@ export function LineChart({
         )}
       </svg>
 
-      {/* Floating detail card */}
+      {/* Floating detail card (decorative — pointer/aria hidden). */}
       {hp && (
         <div
+          aria-hidden="true"
           className="pointer-events-none absolute z-20 whitespace-nowrap rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-[11px] shadow-lg"
           style={{ left: `${hLeft}%`, top: `${(hy / H) * 100}%`, transform: cardTransform, marginTop: '-6px' }}
         >

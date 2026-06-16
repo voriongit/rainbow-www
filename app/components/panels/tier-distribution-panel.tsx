@@ -30,9 +30,10 @@ export function TierDistributionPanel({ fleet, duration }: TierDistributionPanel
               sublabel: tierName(tier),
               value: fleet.byTier[tier] ?? 0,
               color: TIER_COLORS[tier],
+              href: exploreHref(`/tier/${tier}`, { window: duration }),
             }))}
             height={185}
-            hrefFor={(b) => exploreHref(`/tier/${b.label}`, { window: duration })}
+            valueLabel="Agents"
           />
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
@@ -57,10 +58,12 @@ export function TierDistributionPanel({ fleet, duration }: TierDistributionPanel
               <BarChart
                 dense
                 height={120}
+                valueLabel="Agents"
                 bars={fleet.scoreHistogram.map((b) => {
                   const tier = tierKeyForScore(b.bucketMin);
                   return {
                     label: String(b.bucketMin),
+                    sublabel: `${b.bucketMin}–${b.bucketMax}`,
                     value: b.count,
                     color: TIER_COLORS[tier],
                   };
