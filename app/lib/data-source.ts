@@ -125,8 +125,9 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   // Cross-agent correlations are HONESTLY DERIVED from real co-occurrence in
   // the (synthetic) signal stream — shared failing factors and shared
   // correlation ids across agents. Delegation/escalation is deliberately left
-  // empty here; the simulator models trust dynamics, not agent-to-agent
-  // delegation, so that lives only on the explicitly-modeled /lab route.
+  // empty here; the simulator has no native agent-to-agent delegation, so it
+  // lives only on the /lab route, which derives it under a declared
+  // orchestration policy (one model the assumption-free main dashboard avoids).
   const fleetWindowSignals = rainbow.collector.queryAll(from, now);
   const fleet = rainbow.getOrchestrationSnapshot(
     {
@@ -336,14 +337,18 @@ export interface DelegationModel {
   escalations: EscalationEvent[];
   summary: DelegationHealthSummary;
   handlers: string[];
+  /** Agents with real CT-SEC/CT-ID failures — scopes the collusion flag. */
+  securityCluster: string[];
 }
 
 /**
  * Delegation health via the DelegationService producer (see its module header).
- * The trust simulator models trust dynamics, not agent-to-agent delegation, so
- * the DelegationService is a synthetic delegation MODEL fed by real stress
- * signals on the bus. Surfaced only on the explicitly-labeled /lab route, never
- * the main dashboard.
+ * The simulator has no native delegation, so the service applies one explicit
+ * orchestration policy and DERIVES every outcome from the real simulated trust
+ * trajectories (handler pool, resolution and rejection all come from each
+ * handler's actual trust at the escalation instant via `resolveScoreAt` — no
+ * fabrication). The policy itself is the only model, so this is surfaced only on
+ * the explicitly-labeled /lab route, never the main dashboard.
  */
 export function getDelegationModel(durationRaw?: string): DelegationModel {
   const { sim, rainbow } = getSource();
@@ -352,9 +357,15 @@ export function getDelegationModel(durationRaw?: string): DelegationModel {
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const signals = rainbow.collector.queryAll(from, now);
-  const service = new DelegationService(
-    sim.agents().map((a) => ({ agentId: a.agentId, score: a.score, tier: a.tier }))
-  );
+  const service = new DelegationService({
+    agentIds: sim.agents().map((a) => a.agentId),
+    trustAt: (agentId, at) => sim.resolveScoreAt(agentId, at),
+  });
   const escalations = service.escalations(signals);
-  return { escalations, summary: computeDelegationHealth(escalations), handlers: service.handlerPool() };
+  return {
+    escalations,
+    summary: computeDelegationHealth(escalations),
+    handlers: service.handlerPoolAt(now),
+    securityCluster: service.securityCluster(signals),
+  };
 }
