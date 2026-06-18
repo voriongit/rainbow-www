@@ -14,8 +14,9 @@
 import { getDelegationModel, isPresetDuration } from '../lib/data-source';
 import { Panel, EmptyState } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
+import { EscalationPairsBars } from '../components/panels/escalation-pairs-bars';
 import { fmtNum, fmtDateTime } from '../lib/format';
-import { STATUS, tint } from '../lib/status-colors';
+import { STATUS } from '../lib/status-colors';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,20 @@ export default async function LabPage({ searchParams }: PageProps) {
     .slice()
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, 60);
+
+  // Enrich the top pairs with each pair's share of its requestor's routing
+  // (the collusion-relevant metric) for the bar view's hover detail.
+  const maxPairCount = Math.max(1, ...summary.topEscalationPairs.map((p) => p.count));
+  const pairBars = summary.topEscalationPairs.map((p) => {
+    const total = requestorTotals.get(p.requestor) ?? 0;
+    return {
+      requestor: p.requestor,
+      handler: p.handler,
+      count: p.count,
+      sharePct: total > 0 ? Math.round((p.count / total) * 100) : 0,
+      colluding: isColluding(p.requestor, p.count),
+    };
+  });
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -90,10 +105,10 @@ export default async function LabPage({ searchParams }: PageProps) {
       ) : (
         <>
           {summary.potentialCollusionRisk && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/[0.07] px-4 py-2.5">
-              <p className="text-xs font-semibold text-red-300">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-4 py-2.5">
+              <p className="text-xs font-semibold text-amber-300">
                 ⚠ Potential collusion risk — a requestor routes ≥80% of its escalations to a single
-                handler (≥3 total). Inspect the flagged pair below.
+                handler (≥3 total). Policy-induced concentration; inspect the flagged pair below.
               </p>
             </div>
           )}
@@ -120,55 +135,12 @@ export default async function LabPage({ searchParams }: PageProps) {
             </Panel>
           </div>
 
-          {/* Top escalation pairs */}
+          {/* Top escalation pairs — bar view */}
           <Panel
             title="Top escalation pairs"
-            subtitle="requestor → handler frequency; flagged when one handler dominates a requestor"
+            subtitle="requestor → handler · bar length = escalation count, with each pair's share of its requestor's routing; flagged when ≥80% concentrates on one handler"
           >
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-white/40">
-                    <th className="py-2 pr-3 font-medium">Requestor</th>
-                    <th className="py-2 pr-3 font-medium">Handler</th>
-                    <th className="py-2 pr-3 text-right font-medium">Count</th>
-                    <th className="py-2 font-medium">Flag</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.topEscalationPairs.map((p) => {
-                    const colluding = isColluding(p.requestor, p.count);
-                    return (
-                      <tr key={`${p.requestor}-${p.handler}`} className="border-b border-white/5">
-                        <td className="py-1.5 pr-3">
-                          <ExploreLink href={exploreHref(`/agent/${p.requestor}`, { window })} className="text-white/80">
-                            {p.requestor}
-                          </ExploreLink>
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <ExploreLink href={exploreHref(`/agent/${p.handler}`, { window })} className="text-white/80">
-                            {p.handler}
-                          </ExploreLink>
-                        </td>
-                        <td className="py-1.5 pr-3 text-right tabular-nums text-white/70">{p.count}</td>
-                        <td className="py-1.5">
-                          {colluding ? (
-                            <span
-                              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                              style={{ color: STATUS.bad, backgroundColor: tint(STATUS.bad) }}
-                            >
-                              collusion risk
-                            </span>
-                          ) : (
-                            <span className="text-white/30">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <EscalationPairsBars pairs={pairBars} maxCount={maxPairCount} window={window} />
           </Panel>
 
           {/* Escalation log */}

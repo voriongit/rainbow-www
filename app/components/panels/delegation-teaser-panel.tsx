@@ -4,7 +4,11 @@
 import type { DelegationHealthSummary } from '@vorionsys/rainbow';
 import { Panel } from '../panel';
 import { ExploreLink, exploreHref } from '../explore-link';
+import { Tooltip } from '../tooltip';
 import { STATUS, tint } from '../../lib/status-colors';
+
+/** Faint dotted-underline + help cursor signalling a hoverable metric value. */
+const METRIC_TIP = 'cursor-help underline decoration-dotted decoration-white/25 underline-offset-2';
 
 /**
  * Compact gateway to the /lab delegation view. Delegation health is DERIVED from
@@ -65,18 +69,35 @@ export function DelegationTeaserPanel({
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/40">Escalations</p>
-              <p className="text-sm font-bold text-white/90">{summary.totalEscalations}</p>
+              <p className="text-sm font-bold text-white/90">
+                <Tooltip
+                  content="Escalations derived in this window — an agent in distress (circuit-breaker trip, risk-accumulator crossing, or security-factor failure) routed to a handler."
+                  className={METRIC_TIP}
+                >
+                  {summary.totalEscalations}
+                </Tooltip>
+              </p>
             </div>
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/40">Resolved</p>
               <p className="text-sm font-bold" style={{ color: STATUS.good }}>
-                {summary.successfulEscalations}
+                <Tooltip
+                  content="Escalations the chosen handler resolved — derived from the handler's actual trust at the time versus the case difficulty."
+                  className={METRIC_TIP}
+                >
+                  {summary.successfulEscalations}
+                </Tooltip>
               </p>
             </div>
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/40">Rejected</p>
               <p className="text-sm font-bold" style={{ color: STATUS.bad }}>
-                {summary.rejectedEscalations}
+                <Tooltip
+                  content="Escalations no available handler could resolve at the time."
+                  className={METRIC_TIP}
+                >
+                  {summary.rejectedEscalations}
+                </Tooltip>
               </p>
             </div>
           </div>
