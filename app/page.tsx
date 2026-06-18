@@ -32,6 +32,7 @@ import { DelegationTeaserPanel } from './components/panels/delegation-teaser-pan
 import { InfoLink } from './components/info-link';
 import { ExploreLink } from './components/explore-link';
 import { CopyLink } from './components/copy-link';
+import { FreshnessIndicator } from './components/freshness-indicator';
 
 export const dynamic = 'force-dynamic';
 
@@ -119,7 +120,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <span className="font-semibold">Synthetic data.</span> This demo renders RAINBOW
             analytics over a deterministic, seeded fleet simulator — no live agents, no real
             trust decisions. The dashboard is strictly read-only. Computed{' '}
-            {fmtDateTime(data.computedAt)} UTC.
+            {fmtDateTime(data.computedAt)} UTC.{' '}
+            <FreshnessIndicator computedAt={data.computedAt.toISOString()} />
           </p>
         </div>
       </header>
