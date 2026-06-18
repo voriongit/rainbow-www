@@ -13,6 +13,7 @@ import { CommandPalette, type CommandItem } from './components/command-palette';
 import { MobileNav } from './components/mobile-nav';
 import { SwRegister } from './components/pwa/sw-register';
 import { InstallPrompt } from './components/pwa/install-prompt';
+import { MotionProvider } from './components/motion/motion-provider';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
@@ -100,7 +101,7 @@ export default function RootLayout({
     <html lang="en" className={inter.className}>
       {/* Bottom padding clears the fixed mobile nav (mobile only); desktop unaffected. */}
       <body className="bg-[#05050a] text-white antialiased pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
-        {children}
+        <MotionProvider>{children}</MotionProvider>
         <CommandPalette items={buildCommandItems()} />
         <MobileNav />
         <InstallPrompt />
