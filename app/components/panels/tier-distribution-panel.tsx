@@ -5,8 +5,12 @@ import type { FleetDistribution } from '@vorionsys/rainbow';
 import { Panel, EmptyState } from '../panel';
 import { BarChart } from '../charts/bar-chart';
 import { exploreHref } from '../explore-link';
+import { Tooltip } from '../tooltip';
 import { fmtNum } from '../../lib/format';
 import { TIER_COLORS, TIER_ORDER, tierName, tierKeyForScore } from '../../lib/tiers';
+
+/** Faint dotted-underline + help cursor signalling a hoverable metric value. */
+const METRIC_TIP = 'cursor-help underline decoration-dotted decoration-white/25 underline-offset-2';
 
 interface TierDistributionPanelProps {
   fleet: FleetDistribution;
@@ -38,15 +42,36 @@ export function TierDistributionPanel({ fleet, duration }: TierDistributionPanel
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/40">Mean</p>
-              <p className="text-sm font-bold text-white/90">{fmtNum(fleet.averageScore)}</p>
+              <p className="text-sm font-bold text-white/90">
+                <Tooltip
+                  content="Arithmetic mean of every agent's current trust score (0–1000)."
+                  className={METRIC_TIP}
+                >
+                  {fmtNum(fleet.averageScore)}
+                </Tooltip>
+              </p>
             </div>
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/40">Median</p>
-              <p className="text-sm font-bold text-white/90">{fmtNum(fleet.medianScore)}</p>
+              <p className="text-sm font-bold text-white/90">
+                <Tooltip
+                  content="Middle score — half the fleet is above it, half below. Robust to a few outliers, unlike the mean."
+                  className={METRIC_TIP}
+                >
+                  {fmtNum(fleet.medianScore)}
+                </Tooltip>
+              </p>
             </div>
             <div className="rounded-lg bg-white/[0.03] px-2 py-2">
               <p className="text-[10px] uppercase tracking-wider text-white/40">Std dev</p>
-              <p className="text-sm font-bold text-white/90">{fmtNum(fleet.standardDeviation)}</p>
+              <p className="text-sm font-bold text-white/90">
+                <Tooltip
+                  content="Standard deviation of the scores — how spread out the fleet is around the mean. Higher means a more polarized fleet."
+                  className={METRIC_TIP}
+                >
+                  {fmtNum(fleet.standardDeviation)}
+                </Tooltip>
+              </p>
             </div>
           </div>
 

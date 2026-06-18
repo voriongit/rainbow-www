@@ -11,6 +11,7 @@
 
 import {
   getDashboardData,
+  getDelegationSummary,
   getFleetInsights,
   getFleetSparklines,
   PRESET_DURATIONS,
@@ -27,6 +28,7 @@ import { FactorHealthPanel } from './components/panels/factor-health-panel';
 import { TransitionsPanel } from './components/panels/transitions-panel';
 import { InsightsPanel } from './components/panels/insights-panel';
 import { CorrelationsPanel } from './components/panels/correlations-panel';
+import { DelegationTeaserPanel } from './components/panels/delegation-teaser-panel';
 import { InfoLink } from './components/info-link';
 import { ExploreLink } from './components/explore-link';
 import { CopyLink } from './components/copy-link';
@@ -41,6 +43,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const data = getDashboardData(params.window, params.agent);
   const fleetInsights = getFleetInsights(params.window);
+  const delegationSummary = getDelegationSummary(params.window);
   const sparklines: Record<string, { t: number; v: number }[]> = {};
   for (const s of getFleetSparklines(params.window)) sparklines[s.agentId] = s.points;
 
@@ -99,7 +102,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <ExploreLink
               href="/lab"
               className="text-xs text-white/45"
-              title="Modeled / illustrative views (delegation health)"
+              title="Delegation health — derived under a modeled orchestration policy"
             >
               Lab ↗
             </ExploreLink>
@@ -138,6 +141,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           label={`Signals · ${data.duration}`}
           value={String(data.fleetSignalCount)}
           sub="fleet-wide"
+          tip="Total Trust Signal Bus events emitted across the whole fleet in the selected window."
         />
         <Stat
           label={
@@ -195,7 +199,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         sparklines={sparklines}
       />
 
-      <CorrelationsPanel correlations={data.fleet.correlations} window={data.duration} />
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <CorrelationsPanel correlations={data.fleet.correlations} window={data.duration} />
+        </div>
+        <DelegationTeaserPanel summary={delegationSummary} window={data.duration} />
+      </div>
 
       <FactorHealthPanel state={data.state} duration={data.duration} />
 
@@ -216,8 +225,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             the decontamination pass.
           </li>
           <li>
-            Delegation health and cross-agent correlation feeds are not wired in this demo
-            (no DelegationService / CrossAgentCorrelator upstream).
+            Cross-agent correlation is derived from real co-occurrence in the signal stream
+            (shown above). Delegation health is also derived from real trust, but under a declared
+            orchestration policy (the simulator has no native agent-to-agent delegation), so only a
+            compact teaser appears above — tagged &ldquo;modeled policy&rdquo; to set it apart from
+            the grounded metrics — with the full derivation, escalation log and collusion-flag logic
+            in the Lab.
           </li>
           <li>
             Read-only by construction: no mutation paths to trust data, no browser storage;
