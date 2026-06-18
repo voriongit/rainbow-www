@@ -53,8 +53,13 @@ export function EscalationPairsBars({
                 }}
                 aria-hidden="true"
               />
-              {/* foreground row */}
-              <div className="relative flex items-center gap-2 px-3 py-2 text-xs">
+              {/* foreground row — focusable so a TAP on the row body reveals the
+                  supplementary card via :focus-within (touch has no :hover),
+                  without navigating like the inner drill-down links would. */}
+              <div
+                tabIndex={0}
+                className="relative flex items-center gap-2 px-3 py-2 text-xs outline-none [touch-action:manipulation] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-white/25"
+              >
                 <ExploreLink
                   href={exploreHref(`/agent/${p.requestor}`, { window })}
                   className="font-medium text-white/85"
@@ -98,7 +103,7 @@ export function EscalationPairsBars({
                 so it never overflows the bottom of the panel. */}
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute bottom-full left-3 z-20 mb-1 hidden w-max max-w-[300px] rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-[11px] shadow-lg group-hover:block group-focus-within:block"
+              className="pointer-events-none absolute bottom-full left-3 z-20 mb-1 hidden w-max max-w-[min(300px,calc(100vw-2rem))] rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-[11px] shadow-lg group-hover:block group-focus-within:block"
             >
               <span className="font-semibold text-white/90">
                 {p.count} escalations · {p.sharePct}% of {p.requestor}&apos;s routing → {p.handler}

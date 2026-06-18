@@ -17,6 +17,7 @@
 
 import 'server-only';
 
+import { cache } from 'react';
 import {
   Rainbow,
   WINDOW_DURATION_MS,
@@ -77,6 +78,37 @@ function getSource(): Source {
   return globalCache.__rainbowDemoSource;
 }
 
+// ----------------------------------------------------------------------------
+// Per-request memoization (React `cache()` — dedupes within one render pass).
+//
+// Every accessor used to call `new Date()` + `sim.ensureUpTo(now)` + (often)
+// `computeAnalyticsWindow` independently, so a single dashboard render advanced
+// the simulator ~5× and recomputed the selected agent's window twice plus one
+// window PER agent for sparklines (14×). The per-call `new Date()` also meant no
+// two accessors could share work. These three caches fix that: one frozen `now`,
+// one `ensureUpTo`, and one window per (duration, agentId) per request — a real
+// mobile cold-nav win, with the bonus that all accessors now see a consistent
+// `now` (a latent correctness fix). The `globalThis` simulator cache is
+// orthogonal and unchanged.
+// ----------------------------------------------------------------------------
+
+/** One frozen "now" per request render. */
+const getNow = cache((): Date => new Date());
+
+/** The source with the simulated stream advanced to `now` — once per request. */
+const getReadySource = cache((): Source => {
+  const src = getSource();
+  src.sim.ensureUpTo(getNow());
+  return src;
+});
+
+/** Windowed analytics per (duration, agentId) — memoized within a request.
+ *  Always call with both args (cache keys are positional). */
+const computeWindow = cache(
+  (duration: PresetDuration, agentId: string | undefined): AnalyticsWindowResult =>
+    getReadySource().rainbow.computeAnalyticsWindow({ duration, agentId }, getNow())
+);
+
 // ============================================================================
 // Read-only accessors
 // ============================================================================
@@ -103,9 +135,8 @@ export interface DashboardData {
 
 /** Everything the dashboard page needs, in one read pass. */
 export function getDashboardData(durationRaw?: string, agentRaw?: string): DashboardData {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { sim, rainbow } = getReadySource();
+  const now = getNow();
 
   const agents = sim.agents();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
@@ -115,7 +146,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   const agentId = agentInfo.agentId;
 
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
-  const window = rainbow.computeAnalyticsWindow({ duration, agentId }, now);
+  const window = computeWindow(duration, agentId);
   // Seed the rolling-24h accumulator with pre-window failures so the left
   // edge of the chart reflects true accumulated pressure, not a cold start
   const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
@@ -172,9 +203,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
 
 /** Roster of simulated agents (read-only) */
 export function getAgents(): SimAgentInfo[] {
-  const { sim } = getSource();
-  sim.ensureUpTo(new Date());
-  return sim.agents();
+  return getReadySource().sim.agents();
 }
 
 /** Windowed analytics for one agent (or fleet-wide when agentId omitted) */
@@ -182,18 +211,15 @@ export function getWindowResult(
   durationRaw?: string,
   agentId?: string
 ): AnalyticsWindowResult {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  getReadySource();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
-  return rainbow.computeAnalyticsWindow({ duration, agentId }, now);
+  return computeWindow(duration, agentId);
 }
 
 /** Corrected risk accumulator trend (P(T) × R) for one agent */
 export function getAgentRiskTrend(durationRaw?: string, agentId?: string): RiskTrend {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { rainbow } = getReadySource();
+  const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
@@ -205,9 +231,8 @@ export function getAgentRiskTrend(durationRaw?: string, agentId?: string): RiskT
 
 /** Fleet-wide orchestration snapshot */
 export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { sim, rainbow } = getReadySource();
+  const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   return rainbow.getOrchestrationSnapshot(
     { agentScores: sim.currentScores(), correlationAlerts: [], escalationEvents: [] },
@@ -232,9 +257,8 @@ export function getAgentSignals(
     outcome?: 'success' | 'failure' | 'blocked';
   }
 ): IngestedSignal[] {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { rainbow } = getReadySource();
+  const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   let signals = rainbow.collector.query(agentId, from, now);
@@ -258,9 +282,8 @@ export function getFleetSignals(
   durationRaw?: string,
   filter?: Parameters<typeof getAgentSignals>[2]
 ): IngestedSignal[] {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { rainbow } = getReadySource();
+  const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   let signals = rainbow.collector.queryAll(from, now);
@@ -281,16 +304,12 @@ export function getFleetSignals(
 
 /** One agent's roster info (or undefined if unknown). */
 export function getAgentInfo(agentId: string): SimAgentInfo | undefined {
-  const { sim } = getSource();
-  sim.ensureUpTo(new Date());
-  return sim.agents().find((a) => a.agentId === agentId);
+  return getReadySource().sim.agents().find((a) => a.agentId === agentId);
 }
 
 /** Agents currently resolving to a given tier key (T0–T7). */
 export function getTierMembers(tierKey: string): SimAgentInfo[] {
-  const { sim } = getSource();
-  sim.ensureUpTo(new Date());
-  return sim.agents().filter((a) => a.tier === tierKey);
+  return getReadySource().sim.agents().filter((a) => a.tier === tierKey);
 }
 
 export interface AgentSparkline {
@@ -301,13 +320,10 @@ export interface AgentSparkline {
 
 /** A compact score trajectory per agent, for fleet-roster sparklines. */
 export function getFleetSparklines(durationRaw?: string): AgentSparkline[] {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { sim } = getReadySource();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   return sim.agents().map((a) => {
-    const samples = rainbow.computeAnalyticsWindow({ duration, agentId: a.agentId }, now).trajectory
-      .samples;
+    const samples = computeWindow(duration, a.agentId).trajectory.samples;
     const step = Math.max(1, Math.ceil(samples.length / 24));
     const points = samples
       .filter((_, i) => i % step === 0 || i === samples.length - 1)
@@ -318,12 +334,10 @@ export function getFleetSparklines(durationRaw?: string): AgentSparkline[] {
 
 /** Rule-based insights derived from the FLEET-WIDE window (all agents). */
 export function getFleetInsights(durationRaw?: string): RecordedInsight[] {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { rainbow } = getReadySource();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
-  const fleetWindow = rainbow.computeAnalyticsWindow({ duration }, now);
-  return rainbow.getInsights(fleetWindow, now);
+  const fleetWindow = computeWindow(duration, undefined);
+  return rainbow.getInsights(fleetWindow, getNow());
 }
 
 const correlator = new CrossAgentCorrelator();
@@ -356,9 +370,8 @@ function buildDelegation(durationRaw?: string): {
   escalations: EscalationEvent[];
   now: Date;
 } {
-  const { sim, rainbow } = getSource();
-  const now = new Date();
-  sim.ensureUpTo(now);
+  const { sim, rainbow } = getReadySource();
+  const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const signals = rainbow.collector.queryAll(from, now);

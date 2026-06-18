@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Keep mobile Safari from auto-inflating text in landscape. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Suppress the browser's own pull-to-refresh / overscroll glow so our
+     gesture layer (and a stable cockpit feel) own vertical overscroll. */
+  body {
+    overscroll-behavior-y: contain;
+  }
+}

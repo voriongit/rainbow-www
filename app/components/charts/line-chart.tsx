@@ -11,8 +11,8 @@
  * Keyboard/touch fall back to the static chart gracefully.
  */
 
-import { useRef, useState } from 'react';
 import { fmtAxisTime, fmtNum, fmtDateTime } from '../../lib/format';
+import { useChartScrub } from './use-chart-scrub';
 
 export interface LinePoint {
   /** Timestamp ms */
@@ -54,8 +54,7 @@ export function LineChart({
   regression = false,
   valueLabel = 'Value',
 }: LineChartProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [hover, setHover] = useState<number | null>(null);
+  const { svgRef, hover, scrubHandlers } = useChartScrub();
 
   if (points.length === 0) return null;
 
@@ -120,23 +119,7 @@ export function LineChart({
   const yTicks = [0, 1, 2, 3].map((i) => yMin + (ySpan * i) / 3);
   const xTicks = [0, 1, 2, 3].map((i) => tMin + (tSpan * i) / 3);
 
-  function onMove(e: React.MouseEvent<SVGSVGElement>) {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width === 0) return;
-    const svgX = ((e.clientX - rect.left) / rect.width) * W;
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < points.length; i++) {
-      const d = Math.abs(x(points[i].t) - svgX);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    setHover(best);
-  }
+  const handlers = scrubHandlers({ count: points.length, positionOf: (i) => x(points[i].t), width: W });
 
   const hp = hover != null ? points[hover] : null;
   const hx = hp ? x(hp.t) : 0;
@@ -153,9 +136,8 @@ export function LineChart({
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
         role="img"
-        aria-label="Time-series chart (hover for values)"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
+        aria-label="Time-series chart (tap or hover for values)"
+        {...handlers}
       >
         <defs>
           <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">

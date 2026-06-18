@@ -76,8 +76,11 @@ export function CommandPalette({ items }: { items: CommandItem[] }) {
 
   const close = useCallback(() => setOpen(false), []);
 
-  // Global toggle: ⌘K / Ctrl-K opens (and closes) the palette. The reset lives
-  // here (an event handler), not in an effect, so it never cascades renders.
+  // Global toggle: ⌘K / Ctrl-K opens (and closes) the palette. A
+  // `rainbow:open-palette` CustomEvent opens it too — that's how the touch
+  // search affordance (bottom nav) opens the palette without a keyboard. The
+  // reset lives here (event handlers), not in an effect, so it never cascades
+  // renders.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -87,8 +90,17 @@ export function CommandPalette({ items }: { items: CommandItem[] }) {
         setOpen((v) => !v);
       }
     };
+    const onOpenEvent = () => {
+      setQuery('');
+      setSelected(0);
+      setOpen(true);
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('rainbow:open-palette', onOpenEvent);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('rainbow:open-palette', onOpenEvent);
+    };
   }, []);
 
   // Focus the input after the overlay paints (no state writes here).
