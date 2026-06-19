@@ -63,3 +63,20 @@
     margin: 14mm;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Embeddable widget routes (/embed/*).
+   These render ONLY a self-contained widget for iframe use. The global chrome
+   (command palette, mobile nav, install prompt) is mounted in layout.tsx inside
+   a single `.print\:hidden` wrapper that this route cannot edit; scope a rule to
+   pages that opt in via `.embed-page` to hide that wrapper and drop the fixed
+   mobile-nav clearance padding, so an embedded widget shows nothing but itself.
+   Additive only — no existing rule is changed.
+   --------------------------------------------------------------------------- */
+body:has(.embed-page) {
+  padding-bottom: 0 !important;
+  background: transparent !important;
+}
+body:has(.embed-page) > .print\:hidden {
+  display: none !important;
+}
