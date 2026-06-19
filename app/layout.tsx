@@ -25,6 +25,7 @@ const STATIC_PAGES: CommandItem[] = [
   { kind: 'page', label: 'Dashboard', href: '/' },
   { kind: 'page', label: 'Concepts glossary', href: '/concepts' },
   { kind: 'page', label: 'Compare agents', href: '/compare' },
+  { kind: 'page', label: 'Benchmark fleet', href: '/benchmark' },
   { kind: 'page', label: 'Control model', href: '/model' },
   { kind: 'page', label: 'Proof chain', href: '/proof' },
   { kind: 'page', label: 'Shareable report', href: '/report' },
@@ -105,7 +106,19 @@ export default function RootLayout({
     <html lang="en" className={inter.className}>
       {/* Bottom padding clears the fixed mobile nav (mobile only); desktop unaffected. */}
       <body className="bg-[#05050a] text-white antialiased pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
-        <MotionProvider>{children}</MotionProvider>
+        {/* Skip link (WCAG 2.4.1) — first focusable element; visually hidden
+            until focused, then jumps keyboard users past the chrome to content. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-black focus:shadow-lg"
+        >
+          Skip to content
+        </a>
+        <MotionProvider>
+          <div id="main-content" tabIndex={-1} className="outline-none">
+            {children}
+          </div>
+        </MotionProvider>
         {/* Global chrome — hidden in print output (e.g. the /report snapshot) so
             exported PDFs carry only page content. */}
         <div className="print:hidden">

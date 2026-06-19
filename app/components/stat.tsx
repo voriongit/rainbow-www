@@ -17,7 +17,7 @@ interface StatProps {
 export function Stat({ label, value, sub, color, tip }: StatProps) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
-      <p className="text-[11px] uppercase tracking-wider text-white/40">{label}</p>
+      <p className="text-[11px] uppercase tracking-wider text-white/55">{label}</p>
       {tip ? (
         <p className="mt-1">
           <Tooltip
@@ -32,7 +32,7 @@ export function Stat({ label, value, sub, color, tip }: StatProps) {
           {value}
         </p>
       )}
-      {sub && <p className="mt-0.5 text-[11px] text-white/45">{sub}</p>}
+      {sub && <p className="mt-0.5 text-[11px] text-white/55">{sub}</p>}
     </div>
   );
 }
