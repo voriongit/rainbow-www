@@ -27,6 +27,13 @@ export interface Threshold {
   color: string;
 }
 
+/** One named, colored line for the optional multi-series overlay. */
+export interface LineSeries {
+  points: LinePoint[];
+  color: string;
+  label: string;
+}
+
 interface LineChartProps {
   points: LinePoint[];
   /** Unique per page instance — namespaces SVG gradient ids */
@@ -42,6 +49,15 @@ interface LineChartProps {
   /** Vertical event markers drawn at a timestamp (e.g. the Elbow — the bend
    *  where the curve crosses into a discrete state change). */
   markers?: { t: number; label: string; color: string }[];
+  /**
+   * Optional multi-series overlay. When provided, every series is drawn on a
+   * shared, auto-fitted domain (with a small inline legend + per-series hover
+   * readouts) instead of the single `points` line. Fully backward compatible:
+   * omit it and the chart behaves exactly as the single-series form.
+   * `points` is still required (used as the time axis / empty-data guard and
+   * as the area-fill baseline series).
+   */
+  series?: LineSeries[];
 }
 
 const W = 640;
@@ -57,17 +73,26 @@ export function LineChart({
   regression = false,
   valueLabel = 'Value',
   markers = [],
+  series,
 }: LineChartProps) {
   const { svgRef, hover, scrubHandlers } = useChartScrub();
 
   if (points.length === 0) return null;
 
+  const multi = series != null && series.length > 0;
+  // The set of lines to draw. Single-series mode wraps `points` so the rest of
+  // the geometry/render path is shared; multi-series mode draws each overlay.
+  const lines: LineSeries[] = multi ? series : [{ points, color, label: valueLabel }];
+
   const H = height;
   const innerW = W - PAD.left - PAD.right;
   const innerH = H - PAD.top - PAD.bottom;
 
-  const tMin = points[0].t;
-  const tMax = points[points.length - 1].t;
+  // Time axis: spans every series so overlaid lines share one x-scale. `points`
+  // is the canonical axis source (and scrub index source) in single-series mode.
+  const allPoints = lines.flatMap((s) => s.points);
+  const tMin = Math.min(...allPoints.map((p) => p.t));
+  const tMax = Math.max(...allPoints.map((p) => p.t));
   const tSpan = Math.max(1, tMax - tMin);
 
   let yMin: number;
@@ -75,7 +100,7 @@ export function LineChart({
   if (yDomain) {
     [yMin, yMax] = yDomain;
   } else {
-    const vs = points.map((p) => p.v);
+    const vs = allPoints.map((p) => p.v);
     const lo = Math.min(...vs);
     const hi = Math.max(...vs);
     const pad = Math.max(1, (hi - lo) * 0.12);
@@ -87,9 +112,14 @@ export function LineChart({
   const x = (t: number) => PAD.left + ((t - tMin) / tSpan) * innerW;
   const y = (v: number) => PAD.top + innerH - ((v - yMin) / ySpan) * innerH;
 
-  const path = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`)
-    .join(' ');
+  const linePath = (pts: LinePoint[]) =>
+    pts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`)
+      .join(' ');
+
+  // Single-series keeps its gradient area fill (byte-identical to before);
+  // multi-series omits the fill so overlaid lines stay readable.
+  const path = linePath(points);
   const areaPath = `${path} L${x(tMax).toFixed(1)},${(PAD.top + innerH).toFixed(1)} L${x(
     tMin
   ).toFixed(1)},${(PAD.top + innerH).toFixed(1)} Z`;
@@ -132,6 +162,25 @@ export function LineChart({
   // Flip the card horizontally near the edges so it stays on-canvas
   const cardTransform =
     hLeft > 80 ? 'translate(-100%, -100%)' : hLeft < 20 ? 'translate(0, -100%)' : 'translate(-50%, -100%)';
+
+  // Per-series readout at the hovered timestamp: snap each overlay line to its
+  // own sample nearest the crosshair (compare series share sample times, but
+  // this stays correct if they ever drift). Only used in multi-series mode.
+  const hoverSeries =
+    multi && hp
+      ? lines.map((s) => {
+          let best = s.points[0];
+          let bestD = Infinity;
+          for (const p of s.points) {
+            const d = Math.abs(p.t - hp.t);
+            if (d < bestD) {
+              bestD = d;
+              best = p;
+            }
+          }
+          return { color: s.color, label: s.label, point: best };
+        })
+      : [];
 
   return (
     <div className="relative">
@@ -191,9 +240,24 @@ export function LineChart({
             </g>
           ))}
 
-        {/* Series */}
-        <path d={areaPath} fill={`url(#${id}-fill)`} />
-        <path d={path} fill="none" stroke={color} strokeWidth="1.8" />
+        {/* Series — single-series keeps the gradient area fill; multi-series
+            draws each overlay line with its own color. */}
+        {multi ? (
+          lines.map((s, i) => (
+            <path
+              key={`line-${i}`}
+              d={linePath(s.points)}
+              fill="none"
+              stroke={s.color}
+              strokeWidth="1.8"
+            />
+          ))
+        ) : (
+          <>
+            <path d={areaPath} fill={`url(#${id}-fill)`} />
+            <path d={path} fill="none" stroke={color} strokeWidth="1.8" />
+          </>
+        )}
 
         {/* Regression overlay */}
         {regLine && (
@@ -243,14 +307,44 @@ export function LineChart({
             );
           })}
 
-        {/* Hover crosshair + marker */}
+        {/* Hover crosshair + marker(s) */}
         {hp && (
           <g pointerEvents="none">
             <line x1={hx} x2={hx} y1={PAD.top} y2={PAD.top + innerH} stroke="#ffffff" strokeOpacity="0.25" strokeDasharray="3 3" />
-            <circle cx={hx} cy={hy} r="3.5" fill={color} stroke="#05050a" strokeWidth="1.5" />
+            {multi ? (
+              hoverSeries.map((hs, i) => (
+                <circle
+                  key={`hpt-${i}`}
+                  cx={x(hs.point.t)}
+                  cy={y(hs.point.v)}
+                  r="3.5"
+                  fill={hs.color}
+                  stroke="#05050a"
+                  strokeWidth="1.5"
+                />
+              ))
+            ) : (
+              <circle cx={hx} cy={hy} r="3.5" fill={color} stroke="#05050a" strokeWidth="1.5" />
+            )}
           </g>
         )}
       </svg>
+
+      {/* Inline legend for the multi-series overlay. */}
+      {multi && (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {lines.map((s, i) => (
+            <span key={`lg-${i}`} className="flex items-center gap-1.5 text-[11px] text-white/65">
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ backgroundColor: s.color }}
+                aria-hidden
+              />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Floating detail card (decorative — pointer/aria hidden). */}
       {hp && (
@@ -259,10 +353,31 @@ export function LineChart({
           className="pointer-events-none absolute z-20 whitespace-nowrap rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-[11px] shadow-lg"
           style={{ left: `${hLeft}%`, top: `${(hy / H) * 100}%`, transform: cardTransform, marginTop: '-6px' }}
         >
-          <div className="font-semibold text-white/90">
-            {valueLabel}: {fmtNum(hp.v, Number.isInteger(hp.v) ? 0 : 1)}
-          </div>
-          <div className="text-white/50">{fmtDateTime(new Date(hp.t))} UTC</div>
+          {multi ? (
+            <>
+              {hoverSeries.map((hs, i) => (
+                <div key={`hc-${i}`} className="flex items-center gap-1.5 font-semibold">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: hs.color }}
+                    aria-hidden
+                  />
+                  <span style={{ color: hs.color }}>{hs.label}</span>
+                  <span className="text-white/90">
+                    {fmtNum(hs.point.v, Number.isInteger(hs.point.v) ? 0 : 1)}
+                  </span>
+                </div>
+              ))}
+              <div className="mt-0.5 text-white/50">{fmtDateTime(new Date(hp.t))} UTC</div>
+            </>
+          ) : (
+            <>
+              <div className="font-semibold text-white/90">
+                {valueLabel}: {fmtNum(hp.v, Number.isInteger(hp.v) ? 0 : 1)}
+              </div>
+              <div className="text-white/50">{fmtDateTime(new Date(hp.t))} UTC</div>
+            </>
+          )}
         </div>
       )}
     </div>
