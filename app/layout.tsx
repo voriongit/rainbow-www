@@ -103,9 +103,13 @@ export default function RootLayout({
       {/* Bottom padding clears the fixed mobile nav (mobile only); desktop unaffected. */}
       <body className="bg-[#05050a] text-white antialiased pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         <MotionProvider>{children}</MotionProvider>
-        <CommandPalette items={buildCommandItems()} />
-        <MobileNav />
-        <InstallPrompt />
+        {/* Global chrome — hidden in print output (e.g. the /report snapshot) so
+            exported PDFs carry only page content. */}
+        <div className="print:hidden">
+          <CommandPalette items={buildCommandItems()} />
+          <MobileNav />
+          <InstallPrompt />
+        </div>
         <SwRegister />
         <Analytics />
       </body>

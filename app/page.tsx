@@ -30,7 +30,7 @@ import { InsightsPanel } from './components/panels/insights-panel';
 import { CorrelationsPanel } from './components/panels/correlations-panel';
 import { DelegationTeaserPanel } from './components/panels/delegation-teaser-panel';
 import { InfoLink } from './components/info-link';
-import { ExploreLink } from './components/explore-link';
+import { ExploreLink, exploreHref } from './components/explore-link';
 import { CopyLink } from './components/copy-link';
 import { FreshnessIndicator } from './components/freshness-indicator';
 import { TierSpectrum } from './components/tier-spectrum';
@@ -120,6 +120,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               title="Delegation health — derived under a modeled orchestration policy"
             >
               Lab ↗
+            </ExploreLink>
+            <ExploreLink
+              href={exploreHref('/report', { window: data.duration, agent: data.agentId })}
+              className="text-xs text-white/45"
+              title="Print-optimized, shareable synthetic report of this view"
+            >
+              Report ↗
             </ExploreLink>
             <CopyLink />
             <span className="text-[11px] text-white/30" title="Press ⌘K (or Ctrl-K) to search">
