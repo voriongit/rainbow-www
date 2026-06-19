@@ -16,6 +16,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
+import { RISK_PRESETS, presetIdFor } from '../lib/lab-presets';
 
 export interface LabPolicyState {
   window: string;
@@ -60,12 +61,43 @@ export function LabPolicyControls({ current }: { current: LabPolicyState }) {
     });
   };
 
+  const activePreset = presetIdFor(current);
+
   return (
-    <div
-      className={`flex flex-col gap-3 transition-opacity sm:flex-row sm:flex-wrap sm:items-end sm:gap-5 ${
-        isPending ? 'opacity-60' : ''
-      }`}
-    >
+    <div className={`flex flex-col gap-4 transition-opacity ${isPending ? 'opacity-60' : ''}`}>
+      {/* Risk-tolerance presets — one-tap bundles of the three knobs below.
+          Presets are defaults, not limits: every knob stays reachable, and a
+          combination matching no preset reads as "Custom mix". */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-white/45">
+          Risk-tolerance preset
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Risk-tolerance preset">
+          {RISK_PRESETS.map((p) => {
+            const active = activePreset === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                aria-pressed={active}
+                title={p.hint}
+                onClick={() => go({ handlers: p.handlers, lead: p.lead, esc: p.esc })}
+                className={presetBtn(active)}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+          {activePreset === 'custom' && (
+            <span className="rounded-md border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-white/60">
+              Custom mix
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Granular knobs — the presets above are bundles of exactly these. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-5">
       <Group label="Handler pool" hint="high-trust agents available to receive escalations">
         <div className="flex rounded-lg border border-white/10 bg-white/[0.03] p-0.5" role="group" aria-label="Handler pool size">
           {HANDLER_OPTIONS.map((n) => (
@@ -113,6 +145,7 @@ export function LabPolicyControls({ current }: { current: LabPolicyState }) {
           ))}
         </div>
       </Group>
+      </div>
     </div>
   );
 }
@@ -139,5 +172,13 @@ function Group({
 function btn(active: boolean): string {
   return `rounded-md px-3 py-1.5 text-xs font-medium tabular-nums transition-colors ${
     active ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'
+  }`;
+}
+
+function presetBtn(active: boolean): string {
+  return `rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
+    active
+      ? 'border-amber-400/40 bg-amber-400/[0.12] text-amber-100'
+      : 'border-white/10 bg-white/[0.03] text-white/60 hover:text-white/90'
   }`;
 }
