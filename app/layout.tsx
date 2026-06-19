@@ -25,6 +25,7 @@ const STATIC_PAGES: CommandItem[] = [
   { kind: 'page', label: 'Dashboard', href: '/' },
   { kind: 'page', label: 'Concepts glossary', href: '/concepts' },
   { kind: 'page', label: 'Compare agents', href: '/compare' },
+  { kind: 'page', label: 'Control model', href: '/model' },
 ];
 const STATIC_TAXONOMY: CommandItem[] = [
   ...TIER_ORDER.map(

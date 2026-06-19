@@ -329,6 +329,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             Browse all concepts
           </ExploreLink>{' '}
           ·{' '}
+          <ExploreLink
+            href="/model"
+            className="text-white/40"
+            title="Illustrative model of the agent-control layer — not connected to live agents"
+          >
+            Control model
+          </ExploreLink>{' '}
+          ·{' '}
           <a href="https://vorion.org" className="underline hover:text-white/60">
             vorion.org
           </a>{' '}
