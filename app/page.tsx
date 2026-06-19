@@ -53,6 +53,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       {/* Header */}
       <header className="flex flex-col gap-4">
+        {/* Brand row */}
+        <div className="flex items-center gap-2 text-[11px]">
+          <a
+            href="https://vorion.org"
+            className="font-semibold tracking-wider text-white/55 transition-colors hover:text-white/85"
+          >
+            VORION ↗
+          </a>
+          <span className="text-white/20">/</span>
+          <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 font-medium text-white/45">
+            Synthetic demo
+          </span>
+        </div>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">
@@ -124,7 +137,48 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             {fmtDateTime(data.computedAt)} UTC.{' '}
             <FreshnessIndicator computedAt={data.computedAt.toISOString()} />
           </p>
+          <details className="mt-2 text-xs text-cyan-200/70">
+            <summary className="cursor-pointer select-none font-medium text-cyan-200/90 [touch-action:manipulation]">
+              How to read this demo
+            </summary>
+            <ul className="mt-2 list-inside list-disc space-y-1 leading-relaxed text-cyan-100/55">
+              <li>
+                <span className="font-medium text-cyan-100/80">Trust spectrum:</span> every agent sits in a
+                tier T0→T7 (red→violet). Tap a band to explore that tier.
+              </li>
+              <li>
+                <span className="font-medium text-cyan-100/80">Risk accumulator:</span> rolling pressure over
+                the window; the <span className="font-medium text-cyan-100/80">Elbow</span> marks where it bends
+                into Breaker — the moment continuous risk becomes a binary state change.
+              </li>
+              <li>
+                Everything here is synthetic and read-only — audit infrastructure and trust telemetry, not live
+                governance.
+              </li>
+              <li>
+                Next: explore the stack at{' '}
+                <a href="https://vorion.org" className="underline hover:text-cyan-100">
+                  vorion.org
+                </a>
+                , or watch agents get audited &amp; gated at{' '}
+                <a href="https://demo.vorion.org" className="underline hover:text-cyan-100">
+                  demo.vorion.org
+                </a>
+                .
+              </li>
+            </ul>
+          </details>
         </div>
+
+        {/* Spectrum accent hairline */}
+        <div
+          className="h-px w-full rounded-full opacity-60"
+          style={{
+            backgroundImage:
+              'linear-gradient(90deg,#6b7280,#ef4444,#f97316,#eab308,#22c55e,#06b6d4,#6366f1,#a855f7)',
+          }}
+          aria-hidden="true"
+        />
       </header>
 
       {/* Rainbow trust tier spectrum — the hero visual */}
@@ -174,6 +228,26 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         window={data.duration}
         subtitle={`Fleet-wide · all agents · last ${data.duration}`}
       />
+
+      {/* Conversion CTAs — bridge to the wider Vorion ecosystem (claim-safe) */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-3 text-sm">
+        <span className="text-white/45">Take it further:</span>
+        <a
+          href="https://vorion.org"
+          className="font-medium text-cyan-300/90 transition-colors hover:text-cyan-200"
+        >
+          Explore the Vorion stack ↗
+        </a>
+        <a href="https://demo.vorion.org" className="text-white/70 transition-colors hover:text-white">
+          See agents audited &amp; gated ↗
+        </a>
+        <a
+          href="https://www.npmjs.com/package/@vorionsys/basis-spec"
+          className="text-white/70 transition-colors hover:text-white"
+        >
+          Open source on npm ↗
+        </a>
+      </div>
 
       {/* Primary panels */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -257,6 +331,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           ·{' '}
           <a href="https://vorion.org" className="underline hover:text-white/60">
             vorion.org
+          </a>{' '}
+          ·{' '}
+          <a href="https://demo.vorion.org" className="underline hover:text-white/60">
+            demo.vorion.org
           </a>
         </p>
       </footer>
