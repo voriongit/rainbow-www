@@ -33,6 +33,7 @@ import { InfoLink } from './components/info-link';
 import { ExploreLink } from './components/explore-link';
 import { CopyLink } from './components/copy-link';
 import { FreshnessIndicator } from './components/freshness-indicator';
+import { TierSpectrum } from './components/tier-spectrum';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +126,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </p>
         </div>
       </header>
+
+      {/* Rainbow trust tier spectrum — the hero visual */}
+      <TierSpectrum
+        byTier={data.fleet.fleet.byTier}
+        totalAgents={data.fleet.fleet.totalAgents}
+        averageScore={data.fleet.fleet.averageScore}
+        medianScore={data.fleet.fleet.medianScore}
+        duration={data.duration}
+      />
 
       {/* Fleet stats strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

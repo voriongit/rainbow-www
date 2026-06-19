@@ -48,12 +48,20 @@ export function InstallPrompt() {
       /iphone|ipad|ipod/i.test(ua) ||
       (navigator as unknown as { standalone?: boolean }).standalone !== undefined;
     const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+    // Defer out of the effect body (lint: react-hooks/set-state-in-effect) — also
+    // avoids an immediate render cascade on mount.
+    let raf = 0;
     if (isIOS && isSafari) {
-      setIosHint(true);
-      setShow(true);
+      raf = requestAnimationFrame(() => {
+        setIosHint(true);
+        setShow(true);
+      });
     }
 
-    return () => window.removeEventListener('beforeinstallprompt', onBIP);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBIP);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, []);
 
   if (!show) return null;

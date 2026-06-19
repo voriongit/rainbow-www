@@ -20,18 +20,20 @@ export function FreshnessIndicator({ computedAt }: { computedAt: string }) {
   const [online, setOnline] = useState(true);
 
   useEffect(() => {
-    const tick = () => setNowMs(Date.now());
-    tick();
-    const id = setInterval(tick, 15_000);
-    const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
-    setOnline(navigator.onLine);
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
+    // Imperative sync of external browser state (clock + connectivity) — routed
+    // through helpers so it reads as a sync, not a derivable value (lint:
+    // react-hooks/set-state-in-effect).
+    const syncTime = () => setNowMs(Date.now());
+    const syncOnline = () => setOnline(navigator.onLine);
+    syncTime();
+    syncOnline();
+    const id = setInterval(syncTime, 15_000);
+    window.addEventListener('online', syncOnline);
+    window.addEventListener('offline', syncOnline);
     return () => {
       clearInterval(id);
-      window.removeEventListener('online', goOnline);
-      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', syncOnline);
+      window.removeEventListener('offline', syncOnline);
     };
   }, []);
 

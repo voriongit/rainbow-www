@@ -39,6 +39,9 @@ interface LineChartProps {
   regression?: boolean;
   /** Label for the value in the hover card (e.g. "Score", "Accumulator") */
   valueLabel?: string;
+  /** Vertical event markers drawn at a timestamp (e.g. the Elbow — the bend
+   *  where the curve crosses into a discrete state change). */
+  markers?: { t: number; label: string; color: string }[];
 }
 
 const W = 640;
@@ -53,6 +56,7 @@ export function LineChart({
   thresholds = [],
   regression = false,
   valueLabel = 'Value',
+  markers = [],
 }: LineChartProps) {
   const { svgRef, hover, scrubHandlers } = useChartScrub();
 
@@ -136,7 +140,11 @@ export function LineChart({
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
         role="img"
-        aria-label="Time-series chart (tap or hover for values)"
+        aria-label={
+          markers.length
+            ? `Time-series chart with ${markers.map((m) => m.label).join(', ')}; tap or hover for values`
+            : 'Time-series chart (tap or hover for values)'
+        }
         {...handlers}
       >
         <defs>
@@ -200,6 +208,40 @@ export function LineChart({
             strokeDasharray="2 4"
           />
         )}
+
+        {/* Event markers (e.g. the Elbow) — drawn over the series, under the
+            hover crosshair so scrubbing stays on top. */}
+        {markers
+          .filter((mk) => mk.t >= tMin && mk.t <= tMax)
+          .map((mk) => {
+            const mx = x(mk.t);
+            const leftPct = (mx / W) * 100;
+            const atEnd = leftPct > 70;
+            return (
+              <g key={mk.label} pointerEvents="none">
+                <line
+                  x1={mx}
+                  x2={mx}
+                  y1={PAD.top}
+                  y2={PAD.top + innerH}
+                  stroke={mk.color}
+                  strokeWidth="1.5"
+                  strokeDasharray="2 2"
+                />
+                <circle cx={mx} cy={PAD.top + 5} r="3" fill={mk.color} stroke="#05050a" strokeWidth="1" />
+                <text
+                  x={mx + (atEnd ? -5 : 5)}
+                  y={PAD.top + 9}
+                  textAnchor={atEnd ? 'end' : 'start'}
+                  fontSize="9"
+                  fontWeight="600"
+                  fill={mk.color}
+                >
+                  {mk.label}
+                </text>
+              </g>
+            );
+          })}
 
         {/* Hover crosshair + marker */}
         {hp && (
