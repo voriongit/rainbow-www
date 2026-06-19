@@ -21,7 +21,7 @@ export interface LabPolicyState {
   window: string;
   handlers: number;
   lead: 'concentrated' | 'distributed';
-  tol: 'low' | 'balanced' | 'high';
+  esc: 'warning' | 'degraded' | 'breaker';
 }
 
 const HANDLER_OPTIONS = [1, 2, 3, 4, 5] as const;
@@ -29,10 +29,13 @@ const LEAD_OPTIONS: { value: LabPolicyState['lead']; label: string }[] = [
   { value: 'concentrated', label: 'Concentrated' },
   { value: 'distributed', label: 'Distributed' },
 ];
-const TOL_OPTIONS: { value: LabPolicyState['tol']; label: string }[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'high', label: 'High' },
+// The risk-accumulator threshold the policy escalates AT — each maps to a real,
+// distinct threshold on the risk chart (Warning ≥60 fires earliest/most;
+// Breaker ≥240 fires latest/fewest). Warning = the prior default behavior.
+const ESC_OPTIONS: { value: LabPolicyState['esc']; label: string }[] = [
+  { value: 'warning', label: 'Warning' },
+  { value: 'degraded', label: 'Degraded' },
+  { value: 'breaker', label: 'Breaker' },
 ];
 
 export function LabPolicyControls({ current }: { current: LabPolicyState }) {
@@ -47,7 +50,7 @@ export function LabPolicyControls({ current }: { current: LabPolicyState }) {
     qs.set('window', next.window);
     qs.set('handlers', String(next.handlers));
     qs.set('lead', next.lead);
-    qs.set('tol', next.tol);
+    qs.set('esc', next.esc);
     return `/lab?${qs.toString()}`;
   };
 
@@ -95,15 +98,15 @@ export function LabPolicyControls({ current }: { current: LabPolicyState }) {
         </div>
       </Group>
 
-      <Group label="Risk tolerance" hint="lower tolerance escalates on earlier stress signals">
-        <div className="flex rounded-lg border border-white/10 bg-white/[0.03] p-0.5" role="group" aria-label="Risk tolerance">
-          {TOL_OPTIONS.map((o) => (
+      <Group label="Escalate at" hint="the risk-accumulator threshold the policy escalates on (earlier = more escalations)">
+        <div className="flex rounded-lg border border-white/10 bg-white/[0.03] p-0.5" role="group" aria-label="Escalation threshold">
+          {ESC_OPTIONS.map((o) => (
             <button
               key={o.value}
               type="button"
-              aria-pressed={o.value === current.tol}
-              onClick={() => go({ tol: o.value })}
-              className={btn(o.value === current.tol)}
+              aria-pressed={o.value === current.esc}
+              onClick={() => go({ esc: o.value })}
+              className={btn(o.value === current.esc)}
             >
               {o.label}
             </button>

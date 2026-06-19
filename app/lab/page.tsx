@@ -16,9 +16,9 @@ import {
   clampHandlerCount,
   DEFAULT_HANDLER_COUNT,
   DEFAULT_LEAD_ROUTING,
-  DEFAULT_RISK_TOLERANCE,
+  DEFAULT_ESCALATION_THRESHOLD,
   type LeadRouting,
-  type RiskTolerance,
+  type EscalationThreshold,
 } from '../lib/delegation-service';
 import { Panel, EmptyState } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
@@ -34,14 +34,14 @@ interface PageProps {
     window?: string;
     handlers?: string;
     lead?: string;
-    tol?: string;
+    esc?: string;
   }>;
 }
 
 const isLeadRouting = (v: unknown): v is LeadRouting =>
   v === 'concentrated' || v === 'distributed';
-const isRiskTolerance = (v: unknown): v is RiskTolerance =>
-  v === 'low' || v === 'balanced' || v === 'high';
+const isEscalationThreshold = (v: unknown): v is EscalationThreshold =>
+  v === 'warning' || v === 'degraded' || v === 'breaker';
 
 function fmtResolution(ms: number): string {
   if (ms <= 0) return '—';
@@ -60,12 +60,14 @@ export default async function LabPage({ searchParams }: PageProps) {
     sp.handlers !== undefined ? Number(sp.handlers) : DEFAULT_HANDLER_COUNT
   );
   const lead: LeadRouting = isLeadRouting(sp.lead) ? sp.lead : DEFAULT_LEAD_ROUTING;
-  const tol: RiskTolerance = isRiskTolerance(sp.tol) ? sp.tol : DEFAULT_RISK_TOLERANCE;
+  const esc: EscalationThreshold = isEscalationThreshold(sp.esc)
+    ? sp.esc
+    : DEFAULT_ESCALATION_THRESHOLD;
 
   const { escalations, summary, handlers, securityCluster } = getDelegationModel(window, {
     handlerCount,
     leadRouting: lead,
-    riskTolerance: tol,
+    escalateAt: esc,
   });
 
   // Per-pair collusion flag: the library's ≥80%-to-one-handler rule, SCOPED to
@@ -122,7 +124,7 @@ export default async function LabPage({ searchParams }: PageProps) {
               policy over synthetic data; they do not affect any real agent.
             </span>
           </div>
-          <LabPolicyControls current={{ window, handlers: handlerCount, lead, tol }} />
+          <LabPolicyControls current={{ window, handlers: handlerCount, lead, esc }} />
         </div>
 
         {/* Honesty disclaimer */}
@@ -144,7 +146,7 @@ export default async function LabPage({ searchParams }: PageProps) {
             simulator has no native delegation), so this stays off the main dashboard. The
             playground knobs above change <em>only</em> this routing/trigger policy — the seeded
             simulator and trust trajectories are byte-identical regardless. Window: {window} ·
-            handler pool: {handlerCount} · lead routing: {lead} · risk tolerance: {tol}.
+            handler pool: {handlerCount} · lead routing: {lead} · escalate at: {esc}.
           </p>
         </div>
       </header>

@@ -33,15 +33,19 @@
 import type { IngestedSignal, EscalationEvent } from '@vorionsys/rainbow';
 
 /**
- * Stress bus-signal types, tiered by acuteness. The active set is selected by
- * the `riskTolerance` POLICY knob (see DelegationPolicy): a lower tolerance
- * escalates more eagerly (includes the early risk-accumulator WARNING), a
- * higher tolerance only escalates on acute stress. This is a property of the
- * modeled routing policy — it changes which real signals the policy ACTS on,
- * never the signals themselves.
+ * Risk-accumulator stress signals that can trigger an escalation, keyed by the
+ * `escalateAt` POLICY threshold (see DelegationPolicy). Escalating AT a lower
+ * threshold (warning) fires on more, earlier signals; AT a higher threshold
+ * (breaker) only fires once the breaker actually trips. Each level is a
+ * distinct, monotonic subset that mirrors the thresholds drawn on the
+ * risk-accumulator chart. This selects which real signals the policy ACTS on —
+ * it never touches the signals themselves.
  */
-const ACUTE_STRESS_TYPES = ['circuit_breaker_tripped', 'risk_accumulator_degraded'] as const;
-const EARLY_STRESS_TYPE = 'risk_accumulator_warning';
+const STRESS_TYPES_BY_THRESHOLD = {
+  warning: ['circuit_breaker_tripped', 'risk_accumulator_degraded', 'risk_accumulator_warning'],
+  degraded: ['circuit_breaker_tripped', 'risk_accumulator_degraded'],
+  breaker: ['circuit_breaker_tripped'],
+} as const;
 
 /** Security factors whose shared failure routes a requestor to the security lead. */
 const SECURITY_FACTORS = new Set(['CT-SEC', 'CT-ID']);
@@ -63,12 +67,15 @@ export type LeadRouting = 'concentrated' | 'distributed';
 export const DEFAULT_LEAD_ROUTING: LeadRouting = 'concentrated';
 
 /**
- * Risk-tolerance policy. Selects which stress signals the policy escalates on —
- * `low` escalates eagerly (acute + early warnings), `balanced` is acute + early
- * (the prior default), `high` only escalates on acute stress.
+ * Escalation-threshold policy — the risk-accumulator level at which the policy
+ * escalates, mirroring the chart's thresholds. `warning` (the default, = the
+ * prior behavior) is the most eager (fires on warning, degraded AND breaker);
+ * `degraded` skips the early warning; `breaker` only escalates once the circuit
+ * breaker trips. Each level is a distinct, monotonic subset, so all three knob
+ * positions produce visibly different escalation behavior.
  */
-export type RiskTolerance = 'low' | 'balanced' | 'high';
-export const DEFAULT_RISK_TOLERANCE: RiskTolerance = 'balanced';
+export type EscalationThreshold = 'warning' | 'degraded' | 'breaker';
+export const DEFAULT_ESCALATION_THRESHOLD: EscalationThreshold = 'warning';
 
 /**
  * The modeled DELEGATION POLICY overlaid on the honestly-grounded signal
@@ -81,8 +88,8 @@ export interface DelegationPolicy {
   handlerCount?: number;
   /** Security-lead routing (collusion driver vs. spread). */
   leadRouting?: LeadRouting;
-  /** Which stress signals trigger an escalation. */
-  riskTolerance?: RiskTolerance;
+  /** The risk-accumulator threshold at which the policy escalates. */
+  escalateAt?: EscalationThreshold;
 }
 
 export interface DelegationConfig extends DelegationPolicy {
@@ -111,15 +118,11 @@ export class DelegationService {
     this.trustAt = cfg.trustAt;
     this.handlerCount = clampHandlerCount(cfg.handlerCount ?? DEFAULT_HANDLER_COUNT);
     this.leadRouting = cfg.leadRouting ?? DEFAULT_LEAD_ROUTING;
-    // Risk tolerance selects the active stress-trigger set. `balanced` (the
-    // prior default) and `low` both include the early warning; `low` also lets
-    // the early warning trigger security-cluster routing (see below). `high`
-    // restricts triggers to acute stress only.
-    const tolerance: RiskTolerance = cfg.riskTolerance ?? DEFAULT_RISK_TOLERANCE;
-    this.stressTypes =
-      tolerance === 'high'
-        ? new Set<string>(ACUTE_STRESS_TYPES)
-        : new Set<string>([...ACUTE_STRESS_TYPES, EARLY_STRESS_TYPE]);
+    // The escalateAt threshold selects the active stress-trigger subset (each
+    // level is distinct + monotonic). `warning` (default) reproduces the prior
+    // behavior exactly.
+    const escalateAt: EscalationThreshold = cfg.escalateAt ?? DEFAULT_ESCALATION_THRESHOLD;
+    this.stressTypes = new Set<string>(STRESS_TYPES_BY_THRESHOLD[escalateAt]);
     this.ordinal = new Map(this.agentIds.map((id, i) => [id, i]));
   }
 

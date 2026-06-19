@@ -387,7 +387,7 @@ function buildDelegation(
     trustAt: (agentId, at) => sim.resolveScoreAt(agentId, at),
     handlerCount: policy?.handlerCount,
     leadRouting: policy?.leadRouting,
-    riskTolerance: policy?.riskTolerance,
+    escalateAt: policy?.escalateAt,
   });
   return { service, signals, escalations: service.escalations(signals), now };
 }
