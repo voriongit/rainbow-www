@@ -17,9 +17,9 @@ import {
   isPresetDuration,
   type DashboardData,
 } from '../lib/data-source';
-import { TIER_COLORS, tierName, type TierKey } from '../lib/tiers';
-import { STATUS, tint } from '../lib/status-colors';
-import { fmtNum, fmtSigned } from '../lib/format';
+import { TIER_COLORS, tierName, tierIndexForScore, type TierKey } from '../lib/tiers';
+import { STATUS, tint, healthColor } from '../lib/status-colors';
+import { fmtNum, fmtSigned, fmtPct } from '../lib/format';
 import { ExploreLink, exploreHref } from '../components/explore-link';
 import { Panel } from '../components/panel';
 import { LineChart } from '../components/charts/line-chart';
@@ -39,6 +39,17 @@ const TREND_META = {
 
 const DEFAULT_A = 'cascade-03';
 const DEFAULT_B = 'orion-07';
+
+/** Distinct accent pair used when both agents resolve to the same tier color,
+ *  so the two trajectory lines never collapse into one indistinguishable hue. */
+const ACCENT_A = '#22d3ee'; // cyan
+const ACCENT_B = '#f0abfc'; // fuchsia
+
+const TREND_RANK: Record<'rising' | 'stable' | 'falling', number> = {
+  rising: 1,
+  stable: 0,
+  falling: -1,
+};
 
 /** A labelled mini-statistic for the compare panels. */
 function MiniStat({
@@ -140,6 +151,265 @@ function CompareColumn({
   );
 }
 
+/** A single trust-delta callout tile (A vs B for one dimension). */
+function DeltaTile({
+  label,
+  valueA,
+  valueB,
+  delta,
+  colorA,
+  colorB,
+  idA,
+  idB,
+}: {
+  label: string;
+  valueA: string;
+  valueB: string;
+  delta: string;
+  colorA: string;
+  colorB: string;
+  idA: string;
+  idB: string;
+}) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
+      <p className="text-[11px] uppercase tracking-wider text-white/40">{label}</p>
+      <div className="mt-1.5 flex items-baseline gap-2 text-sm font-semibold">
+        <span style={{ color: colorA }} title={idA}>
+          {valueA}
+        </span>
+        <span className="text-white/30">vs</span>
+        <span style={{ color: colorB }} title={idB}>
+          {valueB}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-white/55">{delta}</p>
+    </div>
+  );
+}
+
+/**
+ * Trust-delta callouts: the headline gaps between the two agents (score, tier,
+ * trend) read straight off each agent's window analytics — no fabrication.
+ */
+function DeltaCallouts({
+  dA,
+  dB,
+  colorA,
+  colorB,
+}: {
+  dA: DashboardData;
+  dB: DashboardData;
+  colorA: string;
+  colorB: string;
+}) {
+  const idA = dA.agentInfo.agentId;
+  const idB = dB.agentInfo.agentId;
+  const scoreA = dA.window.trajectory.current;
+  const scoreB = dB.window.trajectory.current;
+  const scoreGap = scoreA - scoreB;
+
+  const tierIdxA = tierIndexForScore(scoreA);
+  const tierIdxB = tierIndexForScore(scoreB);
+  const tierGap = tierIdxA - tierIdxB;
+
+  const trendA = dA.window.trajectory.trend;
+  const trendB = dB.window.trajectory.trend;
+  const trendGap = TREND_RANK[trendA] - TREND_RANK[trendB];
+
+  const ahead = (gap: number) => (gap > 0 ? idA : gap < 0 ? idB : null);
+  const scoreLead = ahead(scoreGap);
+  const tierLead = ahead(tierGap);
+  const trendLead = ahead(trendGap);
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <DeltaTile
+        label="Score gap"
+        valueA={fmtNum(scoreA)}
+        valueB={fmtNum(scoreB)}
+        delta={
+          scoreGap === 0
+            ? 'Even on trust score.'
+            : `${fmtNum(Math.abs(scoreGap))} pts apart — ${scoreLead} leads.`
+        }
+        colorA={colorA}
+        colorB={colorB}
+        idA={idA}
+        idB={idB}
+      />
+      <DeltaTile
+        label="Tier gap"
+        valueA={dA.agentInfo.tier}
+        valueB={dB.agentInfo.tier}
+        delta={
+          tierGap === 0
+            ? 'Same trust tier.'
+            : `${Math.abs(tierGap)} tier${Math.abs(tierGap) === 1 ? '' : 's'} apart — ${tierLead} higher.`
+        }
+        colorA={colorA}
+        colorB={colorB}
+        idA={idA}
+        idB={idB}
+      />
+      <DeltaTile
+        label="Trend gap"
+        valueA={TREND_META[trendA].label}
+        valueB={TREND_META[trendB].label}
+        delta={
+          trendGap === 0
+            ? 'Same trajectory direction.'
+            : `${trendLead} on the stronger trajectory.`
+        }
+        colorA={colorA}
+        colorB={colorB}
+        idA={idA}
+        idB={idB}
+      />
+    </div>
+  );
+}
+
+/**
+ * Overlaid score trajectories — both agents on one shared y-domain via the
+ * LineChart multi-series overlay, colored to match the delta callouts.
+ */
+function OverlayTrajectory({
+  dA,
+  dB,
+  colorA,
+  colorB,
+  window,
+}: {
+  dA: DashboardData;
+  dB: DashboardData;
+  colorA: string;
+  colorB: string;
+  window: string;
+}) {
+  const idA = dA.agentInfo.agentId;
+  const idB = dB.agentInfo.agentId;
+  const toPoints = (d: DashboardData) =>
+    d.window.trajectory.samples.map((s) => ({ t: s.timestamp.getTime(), v: s.score }));
+
+  return (
+    <Panel
+      title="Overlaid trust trajectories"
+      subtitle={`${idA} vs ${idB} · window ${window}`}
+      footnote="Both score trajectories on one shared scale, read directly from each agent's windowed analytics. Synthetic deterministic data — no live agents."
+    >
+      <LineChart
+        id="cmp-overlay"
+        points={toPoints(dA)}
+        series={[
+          { points: toPoints(dA), color: colorA, label: idA },
+          { points: toPoints(dB), color: colorB, label: idB },
+        ]}
+        height={240}
+      />
+    </Panel>
+  );
+}
+
+/**
+ * Side-by-side factor-health diff. Joins the two agents' 16-factor health by
+ * factor code and surfaces the largest divergences first; each row shows both
+ * success rates (in spectrum/health colors) and the gap between them. Factors
+ * lacking evidence in either agent's window are honestly marked, never guessed.
+ */
+function FactorDiff({
+  dA,
+  dB,
+  colorA,
+  colorB,
+  window,
+}: {
+  dA: DashboardData;
+  dB: DashboardData;
+  colorA: string;
+  colorB: string;
+  window: string;
+}) {
+  const idA = dA.agentInfo.agentId;
+  const idB = dB.agentInfo.agentId;
+  const byCodeB = new Map(dB.state.factors.map((f) => [f.factorCode, f]));
+
+  const rows = dA.state.factors
+    .map((fa) => {
+      const fb = byCodeB.get(fa.factorCode);
+      const hasA = fa.recentEvidenceCount > 0;
+      const hasB = fb != null && fb.recentEvidenceCount > 0;
+      const comparable = hasA && hasB;
+      const gap = comparable ? fa.currentScore - (fb?.currentScore ?? 0) : 0;
+      return { fa, fb, hasA, hasB, comparable, gap };
+    })
+    // Diverging, comparable factors first (largest gap), then the rest.
+    .sort((r1, r2) => {
+      if (r1.comparable !== r2.comparable) return r1.comparable ? -1 : 1;
+      return Math.abs(r2.gap) - Math.abs(r1.gap);
+    });
+
+  const cell = (
+    has: boolean,
+    score: number | undefined,
+    code: string
+  ) =>
+    has && score != null ? (
+      <span className="font-semibold" style={{ color: healthColor(score) }}>
+        {fmtPct(score)}
+      </span>
+    ) : (
+      <span className="text-white/30">no data</span>
+    );
+
+  return (
+    <Panel
+      title="Factor-health diff"
+      subtitle={`${idA} vs ${idB} · biggest divergences first · last ${window}`}
+      footnote="Per-factor success rate over window evidence, joined across both agents. Rows where either agent has no evidence in this window are marked “no data” and excluded from the gap ranking — absence of evidence is not evidence of health."
+    >
+      <ul className="flex flex-col divide-y divide-white/[0.06]">
+        <li className="flex items-center gap-2 pb-1.5 text-[10px] uppercase tracking-wider text-white/35">
+          <span className="flex-1">Factor</span>
+          <span className="w-14 shrink-0 text-right" style={{ color: colorA }}>
+            A
+          </span>
+          <span className="w-14 shrink-0 text-right" style={{ color: colorB }}>
+            B
+          </span>
+          <span className="w-16 shrink-0 text-right">Gap</span>
+        </li>
+        {rows.map(({ fa, fb, hasA, hasB, comparable, gap }) => {
+          const leadColor = gap > 0 ? colorA : gap < 0 ? colorB : STATUS.neutral;
+          return (
+            <li key={fa.factorCode} className="flex items-center gap-2 py-1.5 text-xs">
+              <ExploreLink
+                href={exploreHref(`/factor/${fa.factorCode}`, { window })}
+                className="flex-1 truncate text-white/75"
+                title={`${fa.factorName} (${fa.factorCode})`}
+              >
+                {fa.factorName}
+              </ExploreLink>
+              <span className="w-14 shrink-0 text-right">
+                {cell(hasA, fa.currentScore, fa.factorCode)}
+              </span>
+              <span className="w-14 shrink-0 text-right">
+                {cell(hasB, fb?.currentScore, fa.factorCode)}
+              </span>
+              <span
+                className="w-16 shrink-0 text-right text-[11px] font-semibold"
+                style={{ color: comparable && gap !== 0 ? leadColor : STATUS.neutralDim }}
+              >
+                {comparable ? (gap === 0 ? 'even' : fmtSigned(gap * 100, 0)) : '—'}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
+  );
+}
+
 export default async function ComparePage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
@@ -167,6 +437,15 @@ export default async function ComparePage({ searchParams }: PageProps) {
   const dA = getDashboardData(window, idA);
   const dB = getDashboardData(window, idB);
 
+  // Line/accent color per agent: prefer each agent's tier color, but if both
+  // resolve to the SAME tier hue, fall back to a distinct accent pair so the
+  // overlaid trajectories and diff columns stay visually separable.
+  const tierColorA = TIER_COLORS[dA.agentInfo.tier as TierKey] ?? STATUS.neutral;
+  const tierColorB = TIER_COLORS[dB.agentInfo.tier as TierKey] ?? STATUS.neutral;
+  const sameHue = tierColorA === tierColorB;
+  const colorA = sameHue ? ACCENT_A : tierColorA;
+  const colorB = sameHue ? ACCENT_B : tierColorB;
+
   const pickerAgents = agents.map((a) => ({
     agentId: a.agentId,
     label: a.label,
@@ -192,6 +471,18 @@ export default async function ComparePage({ searchParams }: PageProps) {
         </div>
         <ComparePicker agents={pickerAgents} a={idA} b={idB} window={window} />
       </header>
+
+      <DeltaCallouts dA={dA} dB={dB} colorA={colorA} colorB={colorB} />
+
+      <OverlayTrajectory
+        dA={dA}
+        dB={dB}
+        colorA={colorA}
+        colorB={colorB}
+        window={window}
+      />
+
+      <FactorDiff dA={dA} dB={dB} colorA={colorA} colorB={colorB} window={window} />
 
       <div className="grid gap-6 md:grid-cols-2">
         <CompareColumn d={dA} side="a" window={window} />

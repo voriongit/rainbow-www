@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 export function exploreHref(
   path: string,
@@ -34,6 +34,8 @@ interface ExploreLinkProps {
   variant?: 'inline' | 'block';
   title?: string;
   ariaLabel?: string;
+  /** Inline style escape hatch (e.g. a data-driven heatmap cell color). */
+  style?: CSSProperties;
 }
 
 export function ExploreLink({
@@ -43,13 +45,20 @@ export function ExploreLink({
   variant = 'inline',
   title,
   ariaLabel,
+  style,
 }: ExploreLinkProps) {
   const base =
     variant === 'block'
       ? 'block rounded-lg transition-colors hover:bg-white/[0.04] focus-visible:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30'
       : 'underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:underline focus-visible:outline-none';
   return (
-    <Link href={href} title={title} aria-label={ariaLabel} className={`${base} ${className}`}>
+    <Link
+      href={href}
+      title={title}
+      aria-label={ariaLabel}
+      style={style}
+      className={`${base} ${className}`}
+    >
       {children}
     </Link>
   );

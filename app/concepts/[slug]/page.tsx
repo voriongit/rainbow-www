@@ -44,6 +44,16 @@ export default async function ConceptPage({ params }: PageProps) {
         </span>
         <h1 className="text-2xl font-extrabold tracking-tight text-white/90">{c.term}</h1>
         <p className="max-w-3xl text-base leading-relaxed text-white/80">{c.short}</p>
+        {c.live && (
+          <ExploreLink
+            href={c.live.href}
+            variant="inline"
+            className="w-fit text-sm font-medium text-emerald-300/80 hover:text-emerald-200"
+            ariaLabel={`See ${c.term} live: ${c.live.label}`}
+          >
+            See it live: {c.live.label} →
+          </ExploreLink>
+        )}
       </header>
 
       <div className="grid gap-6 lg:grid-cols-3">
