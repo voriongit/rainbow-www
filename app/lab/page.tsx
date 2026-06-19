@@ -12,17 +12,36 @@
  */
 
 import { getDelegationModel, isPresetDuration } from '../lib/data-source';
+import {
+  clampHandlerCount,
+  DEFAULT_HANDLER_COUNT,
+  DEFAULT_LEAD_ROUTING,
+  DEFAULT_ESCALATION_THRESHOLD,
+  type LeadRouting,
+  type EscalationThreshold,
+} from '../lib/delegation-service';
 import { Panel, EmptyState } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
 import { EscalationPairsBars } from '../components/panels/escalation-pairs-bars';
+import { LabPolicyControls } from '../components/lab-policy-controls';
 import { fmtNum, fmtDateTime } from '../lib/format';
 import { STATUS } from '../lib/status-colors';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
-  searchParams: Promise<{ window?: string }>;
+  searchParams: Promise<{
+    window?: string;
+    handlers?: string;
+    lead?: string;
+    esc?: string;
+  }>;
 }
+
+const isLeadRouting = (v: unknown): v is LeadRouting =>
+  v === 'concentrated' || v === 'distributed';
+const isEscalationThreshold = (v: unknown): v is EscalationThreshold =>
+  v === 'warning' || v === 'degraded' || v === 'breaker';
 
 function fmtResolution(ms: number): string {
   if (ms <= 0) return '—';
@@ -33,7 +52,23 @@ function fmtResolution(ms: number): string {
 export default async function LabPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
-  const { escalations, summary, handlers, securityCluster } = getDelegationModel(window);
+
+  // Modeled-policy knobs, validated + clamped from the URL (no browser storage).
+  // Each falls back to the prior default, so a bare /lab is byte-identical to
+  // before. These select the routing/trigger overlay ONLY — never the sim/trust.
+  const handlerCount = clampHandlerCount(
+    sp.handlers !== undefined ? Number(sp.handlers) : DEFAULT_HANDLER_COUNT
+  );
+  const lead: LeadRouting = isLeadRouting(sp.lead) ? sp.lead : DEFAULT_LEAD_ROUTING;
+  const esc: EscalationThreshold = isEscalationThreshold(sp.esc)
+    ? sp.esc
+    : DEFAULT_ESCALATION_THRESHOLD;
+
+  const { escalations, summary, handlers, securityCluster } = getDelegationModel(window, {
+    handlerCount,
+    leadRouting: lead,
+    escalateAt: esc,
+  });
 
   // Per-pair collusion flag: the library's ≥80%-to-one-handler rule, SCOPED to
   // agents with real CT-SEC/CT-ID failures so the badge reflects the genuine
@@ -74,8 +109,24 @@ export default async function LabPage({ searchParams }: PageProps) {
           ← Dashboard
         </ExploreLink>
         <h1 className="text-2xl font-extrabold tracking-tight">
-          Lab <span className="text-white/50">· derived under a modeled policy</span>
+          Lab <span className="text-white/50">· what-if under a modeled policy</span>
         </h1>
+
+        {/* Interactive policy "what-if" controls — modeled policy over synthetic
+            data, URL-driven (deep-linkable), no browser storage, no real agent. */}
+        <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="text-xs font-semibold text-amber-200/90">
+              Modeled-policy playground
+            </span>
+            <span className="text-[11px] text-amber-200/60">
+              simulated · modeled policy · local-only — these knobs explore a delegation
+              policy over synthetic data; they do not affect any real agent.
+            </span>
+          </div>
+          <LabPolicyControls current={{ window, handlers: handlerCount, lead, esc }} />
+        </div>
+
         {/* Honesty disclaimer */}
         <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-4 py-2.5">
           <p className="text-xs leading-relaxed text-amber-200/80">
@@ -92,8 +143,10 @@ export default async function LabPage({ searchParams }: PageProps) {
             correlation panel surfaces); the policy <em>routes</em> them all to one security lead;
             that policy-induced concentration — ≥80% of a requestor&apos;s (≥3) escalations to one
             handler — is what trips the detector. The routing <em>policy</em> is the one model (the
-            simulator has no native delegation), so this stays off the main dashboard. Window:{' '}
-            {window}.
+            simulator has no native delegation), so this stays off the main dashboard. The
+            playground knobs above change <em>only</em> this routing/trigger policy — the seeded
+            simulator and trust trajectories are byte-identical regardless. Window: {window} ·
+            handler pool: {handlerCount} · lead routing: {lead} · escalate at: {esc}.
           </p>
         </div>
       </header>
