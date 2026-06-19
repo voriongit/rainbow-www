@@ -33,3 +33,33 @@
     animation: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Print styles for the shareable report (/report).
+   Scoped to pages that opt in via `.report-page` so normal screen rendering of
+   every other route is untouched. When a report is printed or "saved as PDF",
+   flip the dark dashboard chrome to ink-on-white for legibility and let the
+   browser print the spectrum/tier colors faithfully. The global nav, command
+   palette and install prompt carry `print:hidden` (layout.tsx) so they never
+   appear in any printed output.
+   --------------------------------------------------------------------------- */
+@media print {
+  /* Only whiten the page when a report is on screen; other routes are not
+     print-targets and keep their normal (dark) appearance. */
+  body:has(.report-page) {
+    background: #ffffff !important;
+    color: #000000 !important;
+    /* Drop the mobile-nav clearance padding so the report starts at the top. */
+    padding-bottom: 0 !important;
+  }
+  /* Preserve the rainbow spectrum + tier band colors in print. */
+  .report-page,
+  .report-page * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Tidy page margins for the exported PDF. */
+  @page {
+    margin: 14mm;
+  }
+}
