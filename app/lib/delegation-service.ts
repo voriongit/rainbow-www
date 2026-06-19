@@ -32,37 +32,94 @@
 
 import type { IngestedSignal, EscalationEvent } from '@vorionsys/rainbow';
 
-/** Stress signals that trigger an escalation to a handler. */
-const STRESS_TYPES = new Set([
-  'circuit_breaker_tripped',
-  'risk_accumulator_degraded',
-  'risk_accumulator_warning',
-]);
+/**
+ * Stress bus-signal types, tiered by acuteness. The active set is selected by
+ * the `riskTolerance` POLICY knob (see DelegationPolicy): a lower tolerance
+ * escalates more eagerly (includes the early risk-accumulator WARNING), a
+ * higher tolerance only escalates on acute stress. This is a property of the
+ * modeled routing policy — it changes which real signals the policy ACTS on,
+ * never the signals themselves.
+ */
+const ACUTE_STRESS_TYPES = ['circuit_breaker_tripped', 'risk_accumulator_degraded'] as const;
+const EARLY_STRESS_TYPE = 'risk_accumulator_warning';
 
 /** Security factors whose shared failure routes a requestor to the security lead. */
 const SECURITY_FACTORS = new Set(['CT-SEC', 'CT-ID']);
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
-export interface DelegationConfig {
+/** Bounds for the handler-pool-size policy knob. */
+export const MIN_HANDLER_COUNT = 1;
+export const MAX_HANDLER_COUNT = 5;
+export const DEFAULT_HANDLER_COUNT = 3;
+
+/**
+ * Security-lead routing policy. `concentrated` (the default, and the collusion
+ * driver) routes every security-failing requestor to ONE designated lead;
+ * `distributed` spreads them across the trusted pool like everyone else, so the
+ * ≥80%-to-one-handler concentration never builds.
+ */
+export type LeadRouting = 'concentrated' | 'distributed';
+export const DEFAULT_LEAD_ROUTING: LeadRouting = 'concentrated';
+
+/**
+ * Risk-tolerance policy. Selects which stress signals the policy escalates on —
+ * `low` escalates eagerly (acute + early warnings), `balanced` is acute + early
+ * (the prior default), `high` only escalates on acute stress.
+ */
+export type RiskTolerance = 'low' | 'balanced' | 'high';
+export const DEFAULT_RISK_TOLERANCE: RiskTolerance = 'balanced';
+
+/**
+ * The modeled DELEGATION POLICY overlaid on the honestly-grounded signal
+ * stream. None of these knobs touch the simulator or the trust trajectories —
+ * they only change how the policy routes/triggers over the real signals. All
+ * fields are optional; the defaults reproduce the prior fixed behavior exactly.
+ */
+export interface DelegationPolicy {
+  /** Size of the high-trust handler pool (clamped 1–5). */
+  handlerCount?: number;
+  /** Security-lead routing (collusion driver vs. spread). */
+  leadRouting?: LeadRouting;
+  /** Which stress signals trigger an escalation. */
+  riskTolerance?: RiskTolerance;
+}
+
+export interface DelegationConfig extends DelegationPolicy {
   /** Stable fleet roster order (agent ids) — used for deterministic spread. */
   agentIds: string[];
   /** Trust score for an agent at a point in time (the simulator's resolveScoreAt). */
   trustAt: (agentId: string, at: Date) => number;
-  /** Size of the high-trust handler pool. */
-  handlerCount?: number;
+}
+
+/** Clamp a requested handler count into the supported range. */
+export function clampHandlerCount(n: number | undefined): number {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return DEFAULT_HANDLER_COUNT;
+  return Math.min(MAX_HANDLER_COUNT, Math.max(MIN_HANDLER_COUNT, Math.round(n)));
 }
 
 export class DelegationService {
   private readonly agentIds: string[];
   private readonly trustAt: (agentId: string, at: Date) => number;
   private readonly handlerCount: number;
+  private readonly leadRouting: LeadRouting;
+  private readonly stressTypes: Set<string>;
   private readonly ordinal: Map<string, number>;
 
   constructor(cfg: DelegationConfig) {
     this.agentIds = [...cfg.agentIds];
     this.trustAt = cfg.trustAt;
-    this.handlerCount = cfg.handlerCount ?? 3;
+    this.handlerCount = clampHandlerCount(cfg.handlerCount ?? DEFAULT_HANDLER_COUNT);
+    this.leadRouting = cfg.leadRouting ?? DEFAULT_LEAD_ROUTING;
+    // Risk tolerance selects the active stress-trigger set. `balanced` (the
+    // prior default) and `low` both include the early warning; `low` also lets
+    // the early warning trigger security-cluster routing (see below). `high`
+    // restricts triggers to acute stress only.
+    const tolerance: RiskTolerance = cfg.riskTolerance ?? DEFAULT_RISK_TOLERANCE;
+    this.stressTypes =
+      tolerance === 'high'
+        ? new Set<string>(ACUTE_STRESS_TYPES)
+        : new Set<string>([...ACUTE_STRESS_TYPES, EARLY_STRESS_TYPE]);
     this.ordinal = new Map(this.agentIds.map((id, i) => [id, i]));
   }
 
@@ -147,7 +204,7 @@ export class DelegationService {
     const triggers = signals
       .filter(
         (s) =>
-          (s.busSignalType && STRESS_TYPES.has(s.busSignalType)) ||
+          (s.busSignalType && this.stressTypes.has(s.busSignalType)) ||
           (!s.success && !s.blocked && s.factorCode != null && SECURITY_FACTORS.has(s.factorCode))
       )
       .slice()
@@ -165,12 +222,20 @@ export class DelegationService {
     // cluster at the window's most recent stress event. Routing every security-
     // failing agent here is a realistic "designated lead" policy that concentrates
     // the requestor→handler pairs. (Outcomes are still derived from the lead's
-    // actual trust at each event's own instant.)
+    // actual trust at each event's own instant.) Under the `distributed` policy
+    // there is NO designated lead, so security-failing agents load-balance across
+    // the trusted pool like everyone else and the concentration never builds.
     const tRef = stress[stress.length - 1].timestamp;
-    const securityLead = this.agentIds
-      .filter((id) => !securitySet.has(id))
-      .map((id) => [id, this.trustAt(id, tRef)] as const)
-      .sort((a, b) => b[1] - a[1] || (this.ordinal.get(a[0]) ?? 0) - (this.ordinal.get(b[0]) ?? 0))[0]?.[0];
+    const securityLead =
+      this.leadRouting === 'concentrated'
+        ? this.agentIds
+            .filter((id) => !securitySet.has(id))
+            .map((id) => [id, this.trustAt(id, tRef)] as const)
+            .sort(
+              (a, b) =>
+                b[1] - a[1] || (this.ordinal.get(a[0]) ?? 0) - (this.ordinal.get(b[0]) ?? 0)
+            )[0]?.[0]
+        : undefined;
 
     const occurrence = new Map<string, number>();
     const out: EscalationEvent[] = [];
