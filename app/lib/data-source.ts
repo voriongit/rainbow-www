@@ -39,7 +39,7 @@ import {
   RISK_SEED_WINDOW_MS,
 } from './corrected-risk-trend';
 import { CrossAgentCorrelator } from './cross-agent-correlator';
-import { DelegationService } from './delegation-service';
+import { DelegationService, type DelegationPolicy } from './delegation-service';
 
 /** Demo seed — fixed so every cold start tells the same relative story */
 const SEED = 20260606;
@@ -364,7 +364,10 @@ export interface DelegationModel {
  * the escalation instant via `resolveScoreAt` — no fabrication). The policy
  * itself is the only model.
  */
-function buildDelegation(durationRaw?: string): {
+function buildDelegation(
+  durationRaw?: string,
+  policy?: DelegationPolicy
+): {
   service: DelegationService;
   signals: IngestedSignal[];
   escalations: EscalationEvent[];
@@ -375,17 +378,29 @@ function buildDelegation(durationRaw?: string): {
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const signals = rainbow.collector.queryAll(from, now);
+  // The policy knobs (handler pool size, lead routing, risk tolerance) change
+  // ONLY the modeled routing overlay. The simulator stream above and the
+  // `resolveScoreAt` trust trajectories below are untouched, so the underlying
+  // synthetic sim/trust stays byte-identical regardless of the policy.
   const service = new DelegationService({
     agentIds: sim.agents().map((a) => a.agentId),
     trustAt: (agentId, at) => sim.resolveScoreAt(agentId, at),
+    handlerCount: policy?.handlerCount,
+    leadRouting: policy?.leadRouting,
+    riskTolerance: policy?.riskTolerance,
   });
   return { service, signals, escalations: service.escalations(signals), now };
 }
 
 /** Full delegation model — escalation log, summary, handler pool and security
- *  cluster — for the explicitly-labeled /lab route. */
-export function getDelegationModel(durationRaw?: string): DelegationModel {
-  const { service, signals, escalations, now } = buildDelegation(durationRaw);
+ *  cluster — for the explicitly-labeled /lab route. Accepts an optional modeled
+ *  policy (handler pool size, lead routing, risk tolerance); omitting it
+ *  reproduces the prior default behavior. */
+export function getDelegationModel(
+  durationRaw?: string,
+  policy?: DelegationPolicy
+): DelegationModel {
+  const { service, signals, escalations, now } = buildDelegation(durationRaw, policy);
   return {
     escalations,
     summary: computeDelegationHealth(escalations),
@@ -395,7 +410,8 @@ export function getDelegationModel(durationRaw?: string): DelegationModel {
 }
 
 /** Just the delegation-health summary, for the dashboard teaser — skips the
- *  handler-pool and security-cluster derivation the full model returns. */
+ *  handler-pool and security-cluster derivation the full model returns. The
+ *  teaser always uses the DEFAULT policy (no overlay knobs). */
 export function getDelegationSummary(durationRaw?: string): DelegationHealthSummary {
   return computeDelegationHealth(buildDelegation(durationRaw).escalations);
 }
