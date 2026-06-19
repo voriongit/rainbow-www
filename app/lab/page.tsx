@@ -21,10 +21,12 @@ import {
   type EscalationThreshold,
 } from '../lib/delegation-service';
 import { Panel, EmptyState } from '../components/panel';
+import { Stat } from '../components/stat';
 import { ExploreLink, exploreHref } from '../components/explore-link';
 import { EscalationPairsBars } from '../components/panels/escalation-pairs-bars';
 import { LabPolicyControls } from '../components/lab-policy-controls';
-import { fmtNum, fmtDateTime } from '../lib/format';
+import { BASELINE_PRESET, presetIdFor, presetLabel } from '../lib/lab-presets';
+import { fmtNum, fmtSigned, fmtDateTime } from '../lib/format';
 import { STATUS } from '../lib/status-colors';
 
 export const dynamic = 'force-dynamic';
@@ -69,6 +71,20 @@ export default async function LabPage({ searchParams }: PageProps) {
     leadRouting: lead,
     escalateAt: esc,
   });
+
+  // What-if impact: recompute the SAME seeded stream under the Balanced baseline
+  // preset and diff it against the current policy, so the knobs' effect is
+  // legible. Only the routing/trigger policy differs — the simulator and trust
+  // trajectories are identical in both runs.
+  const activePreset = presetIdFor({ handlers: handlerCount, lead, esc });
+  const baseline = getDelegationModel(window, {
+    handlerCount: BASELINE_PRESET.handlers,
+    leadRouting: BASELINE_PRESET.lead,
+    escalateAt: BASELINE_PRESET.esc,
+  }).summary;
+  const isBaseline = activePreset === 'balanced';
+  const dEsc = summary.totalEscalations - baseline.totalEscalations;
+  const dRej = summary.rejectedEscalations - baseline.rejectedEscalations;
 
   // Per-pair collusion flag: the library's ≥80%-to-one-handler rule, SCOPED to
   // agents with real CT-SEC/CT-ID failures so the badge reflects the genuine
@@ -125,6 +141,40 @@ export default async function LabPage({ searchParams }: PageProps) {
             </span>
           </div>
           <LabPolicyControls current={{ window, handlers: handlerCount, lead, esc }} />
+        </div>
+
+        {/* What-if impact vs the Balanced baseline — both recomputed over the
+            same seeded stream, so this isolates the policy's effect. */}
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="text-xs font-semibold text-white/80">Impact vs Balanced baseline</span>
+            <span className="text-[11px] text-white/50">
+              {isBaseline
+                ? 'Current policy is the Balanced baseline.'
+                : `${presetLabel(activePreset)} policy · same seeded stream, recomputed`}
+            </span>
+          </div>
+          {isBaseline ? (
+            <p className="text-xs text-white/55">
+              No change — the figures below <em>are</em> the baseline. Pick Strict or Permissive, or
+              tune a knob, to see the delta.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <Stat label="Δ escalations" value={fmtSigned(dEsc, 0)} sub={`baseline ${baseline.totalEscalations}`} />
+              <Stat label="Δ rejected" value={fmtSigned(dRej, 0)} sub={`baseline ${baseline.rejectedEscalations}`} />
+              <Stat
+                label="Collusion flag"
+                value={summary.potentialCollusionRisk ? 'tripped' : 'clear'}
+                color={summary.potentialCollusionRisk ? STATUS.bad : STATUS.good}
+                sub={
+                  baseline.potentialCollusionRisk === summary.potentialCollusionRisk
+                    ? 'same as baseline'
+                    : `baseline: ${baseline.potentialCollusionRisk ? 'tripped' : 'clear'}`
+                }
+              />
+            </div>
+          )}
         </div>
 
         {/* Honesty disclaimer */}
