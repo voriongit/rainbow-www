@@ -91,9 +91,15 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
-      <div>
+      <div className="flex flex-wrap items-center gap-4">
         <ExploreLink href={exploreHref('/', { window })} className="text-sm text-white/55">
           ← Dashboard
+        </ExploreLink>
+        <ExploreLink
+          href={exploreHref('/proof', { agent: agentId, window })}
+          className="text-sm text-white/55"
+        >
+          Proof chain →
         </ExploreLink>
       </div>
 
