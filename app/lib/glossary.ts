@@ -48,6 +48,15 @@ export interface Concept {
   data?: { label: string; value: string }[];
   /** Optional cross-links to related concept slugs. */
   related?: string[];
+  /**
+   * Optional "see it live" target — a real, existing live dashboard route for
+   * this concept (tier / factor / risk / signal-type only). Derived from the
+   * canonical key at registry-build time (NOT reverse-parsed from the slug),
+   * so it always matches what the dynamic route expects. Concepts with no
+   * dedicated live surface (metric, formula, severity, canary, observation,
+   * lifecycle, insight) intentionally omit this.
+   */
+  live?: { href: string; label: string };
 }
 
 export const CATEGORY_LABELS: Record<ConceptCategory, string> = {
@@ -82,6 +91,8 @@ const tierConcepts: Concept[] = Object.entries(TRUST_TIERS).map(([key, spec]) =>
       { label: 'Name', value: t.name },
     ],
     related: ['metric-composite-score', 'formula-penalty-ratio'],
+    // Live route: /tier/[tierKey] uppercases the segment, so pass the key as-is.
+    live: { href: `/tier/${key}`, label: `tier ${key}` },
   };
 });
 
@@ -95,6 +106,9 @@ const riskConcepts: Concept[] = Object.entries(RISK_LEVELS).map(([key, spec]) =>
     long: `${r.description} ${key} actions carry a risk multiplier of ×${r.multiplier} in the loss formula — a failed ${key} action costs proportionally more trust, and feeds the risk accumulator weighted by this multiplier.`,
     data: [{ label: 'Multiplier', value: `×${r.multiplier}` }],
     related: ['formula-risk-accumulator', 'formula-penalty-ratio'],
+    // Live route: /risk/[riskLevel] uppercases the segment and looks it up in
+    // RISK_LEVELS, so pass the canonical key verbatim (preserves LIFE_CRITICAL).
+    live: { href: `/risk/${key}`, label: `risk ${key}` },
   };
 });
 
@@ -112,6 +126,9 @@ const factorConcepts: Concept[] = Object.entries(TRUST_FACTORS).map(([code, spec
       { label: 'Required from', value: f.requiredFrom },
     ],
     related: [`tier-${String(f.requiredFrom).toLowerCase()}`, 'metric-factor-health'],
+    // Live route: /factor/[factorCode] matches case-insensitively; pass the
+    // canonical code (with its hyphen, e.g. CT-SEC) as-is.
+    live: { href: `/factor/${code}`, label: `factor ${code}` },
   };
 });
 
@@ -173,6 +190,9 @@ const signalTypeConcepts: Concept[] = Object.entries(BUS_TYPE_MEANINGS).map(([ty
   category: 'signal-type',
   short: meaning,
   long: `${meaning} This is one of the 15 canonical Trust Bus signal types every BASIS-compliant runtime can emit; analytics aggregate them by type, severity, and risk level.`,
+  // Live route: /signal-type/[type] resolves the segment via
+  // conceptSlug.signalType(type); the canonical underscore key resolves cleanly.
+  live: { href: `/signal-type/${encodeURIComponent(type)}`, label: `signal ${type}` },
 }));
 
 const SEVERITY_MEANINGS: { key: string; meaning: string }[] = [
