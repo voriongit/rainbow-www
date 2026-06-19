@@ -27,3 +27,6 @@ npm-debug.log*
 *.tsbuildinfo
 
 .vercel
+
+# Claude Code worktrees & tooling (never commit)
+.claude/
