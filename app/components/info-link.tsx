@@ -36,14 +36,15 @@ export function InfoLink({ slug, label }: InfoLinkProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onDown);
+    // pointerdown (not mousedown) so a tap outside also closes it on touch.
+    document.addEventListener('pointerdown', onDown);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('pointerdown', onDown);
     };
   }, [open]);
 
@@ -54,7 +55,7 @@ export function InfoLink({ slug, label }: InfoLinkProps) {
         onClick={() => setOpen((o) => !o)}
         aria-label={`Explain ${name}`}
         aria-expanded={open}
-        className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/20 text-[9px] font-semibold leading-none text-white/40 transition-colors hover:border-white/40 hover:text-white/80 focus-visible:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+        className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white/20 text-[9px] font-semibold leading-none text-white/40 transition-colors [touch-action:manipulation] hover:border-white/40 hover:text-white/80 focus-visible:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
       >
         i
       </button>
@@ -63,7 +64,7 @@ export function InfoLink({ slug, label }: InfoLinkProps) {
       {concept && !open && (
         <span
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 hidden w-max max-w-[220px] -translate-x-1/2 whitespace-normal rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-white/80 shadow-lg group-hover/tip:block group-focus-within/tip:block"
+          className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-1.5 hidden w-max max-w-[min(220px,calc(100vw-2rem))] -translate-x-1/2 whitespace-normal rounded-md border border-white/15 bg-[#0c0c14] px-2.5 py-1.5 text-left text-[11px] font-normal normal-case leading-snug tracking-normal text-white/80 shadow-lg group-hover/tip:block group-focus-within/tip:block"
         >
           {concept.short}
         </span>
@@ -74,7 +75,7 @@ export function InfoLink({ slug, label }: InfoLinkProps) {
         <div
           role="dialog"
           aria-label={concept.term}
-          className="absolute left-1/2 top-full z-50 mt-1.5 w-72 -translate-x-1/2 rounded-lg border border-white/15 bg-[#0c0c14] p-3 text-left shadow-xl"
+          className="absolute left-1/2 top-full z-50 mt-1.5 w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-white/15 bg-[#0c0c14] p-3 text-left shadow-xl"
         >
           <p className="text-xs font-semibold text-white/90">{concept.term}</p>
           <p className="mt-1 text-[11px] font-normal normal-case leading-relaxed tracking-normal text-white/65">

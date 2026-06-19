@@ -26,6 +26,23 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
   const trendColor = TREND_COLORS[risk.trend];
   const yMax = Math.max(risk.peakInWindow * 1.2, RISK_ACCUMULATOR.degradedThreshold * 1.15);
 
+  // The Elbow: the first sample where the continuous accumulator bends into a
+  // discrete state change — the most severe threshold it crossed in-window.
+  // (RAINBOW observes this inflection; it does not enact the binary action.)
+  const firstCross = (threshold: number) =>
+    risk.samples.find((s) => s.value >= threshold) ?? null;
+  const cbCross = firstCross(RISK_ACCUMULATOR.cbThreshold);
+  const elbow = cbCross ?? firstCross(RISK_ACCUMULATOR.degradedThreshold);
+  const elbowMarkers = elbow
+    ? [
+        {
+          t: elbow.timestamp.getTime(),
+          label: cbCross ? 'Elbow · entered Breaker' : 'Elbow · entered Degraded',
+          color: cbCross ? '#dc2626' : '#ef4444',
+        },
+      ]
+    : [];
+
   return (
     <Panel
       title="Risk accumulator"
@@ -86,6 +103,7 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
             height={210}
             valueLabel="Accumulator"
             yDomain={[0, yMax]}
+            markers={elbowMarkers}
             thresholds={[
               {
                 value: RISK_ACCUMULATOR.warningThreshold,

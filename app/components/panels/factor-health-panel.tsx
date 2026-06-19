@@ -36,12 +36,13 @@ export function FactorHealthPanel({ state, duration }: FactorHealthPanelProps) {
   })).filter((g) => g.factors.length > 0);
 
   const totalEvidence = state.factors.reduce((s, f) => s + f.recentEvidenceCount, 0);
+  const withEvidence = state.factors.filter((f) => f.recentEvidenceCount > 0).length;
 
   return (
     <Panel
       title="Factor health"
-      subtitle={`${state.agentId} · 16 canonical trust factors · last ${duration}`}
-      footnote="Success rate per factor over window evidence. Factors with no evidence in this window are shown as “no data” — absence of evidence is not evidence of health."
+      subtitle={`${state.agentId} · ${withEvidence}/${state.factors.length} factors with evidence · last ${duration}`}
+      footnote="Success rate per factor over window evidence. Factors with no evidence in this window are shown as “no data” — absence of evidence is not evidence of health (we don't fabricate a score). Maturity & Evolution factors typically accrue evidence only at higher tiers or under specific activity, so partial coverage is expected."
     >
       {totalEvidence === 0 ? (
         <EmptyState

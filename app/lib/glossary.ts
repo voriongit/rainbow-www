@@ -210,6 +210,20 @@ const canaryConcepts: Concept[] = Object.keys(CANARY_FACTOR_MAPPING).map((catego
 
 const metricConcepts: Concept[] = [
   {
+    slug: 'elbow',
+    term: 'Elbow',
+    category: 'metric',
+    short:
+      'The observed inflection inside a window where a continuous trust/risk curve bends into a discrete state change.',
+    long: 'RAINBOW keeps trust continuous (non-binary) for as long as possible — the Elbow is the moment the spectrum must collapse to a binary state. It is the observed inflection inside an observation window where a continuous trust or risk curve bends into a discrete state change: the rolling risk accumulator crossing Degraded → Breaker, or a circuit-breaker trip freezing gains so the score trajectory flatlines. The window stays non-binary; the Elbow is the bend within it. Note: distinct from the statistical "elbow" (a diminishing-returns bend) — here it names the visible bend a governance state change puts in the curve. Honesty boundary: RAINBOW observes the Elbow; the binary governance action is taken elsewhere (the control plane), never by this read-only observatory.',
+    data: [
+      { label: 'Where', value: 'Inside the observation window' },
+      { label: 'Marks', value: 'Continuous → discrete state change' },
+      { label: 'Example', value: 'Degraded → Breaker crossing' },
+    ],
+    related: ['metric-risk-accumulator', 'formula-risk-accumulator', 'metric-trajectory'],
+  },
+  {
     slug: 'metric-composite-score',
     term: 'Composite trust score',
     category: 'metric',

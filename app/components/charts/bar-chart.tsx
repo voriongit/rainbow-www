@@ -16,8 +16,8 @@
  * is no hydration mismatch. All values use the deterministic fmtNum formatter.
  */
 
-import { useRef, useState } from 'react';
 import { fmtNum } from '../../lib/format';
+import { useChartScrub } from './use-chart-scrub';
 
 export interface Bar {
   label: string;
@@ -42,8 +42,7 @@ const W = 640;
 const PAD = { top: 16, right: 8, bottom: 34, left: 8 };
 
 export function BarChart({ bars, height = 190, dense = false, valueLabel = 'Value' }: BarChartProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [hover, setHover] = useState<number | null>(null);
+  const { svgRef, hover, setHover, scrubHandlers } = useChartScrub();
 
   // Guard AFTER hooks so hook order is stable across renders (mirrors LineChart).
   if (bars.length === 0) return null;
@@ -59,23 +58,7 @@ export function BarChart({ bars, height = 190, dense = false, valueLabel = 'Valu
   const barH = (v: number) => (v / max) * innerH;
   const barTop = (v: number) => PAD.top + innerH - barH(v);
 
-  function onMove(e: React.MouseEvent<SVGSVGElement>) {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width === 0) return; // hidden/SSR: avoid NaN svgX (matches LineChart)
-    const svgX = ((e.clientX - rect.left) / rect.width) * W;
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < bars.length; i++) {
-      const d = Math.abs(centerX(i) - svgX);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    setHover(best);
-  }
+  const handlers = scrubHandlers({ count: bars.length, positionOf: centerX, width: W });
 
   const hp = hover != null ? bars[hover] : null;
   const hcx = hover != null ? centerX(hover) : 0;
@@ -97,9 +80,8 @@ export function BarChart({ bars, height = 190, dense = false, valueLabel = 'Valu
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
         role="img"
-        aria-label="Bar chart (hover for values)"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
+        aria-label="Bar chart (tap or hover for values)"
+        {...handlers}
       >
         {bars.map((b, i) => {
           const cx = centerX(i);

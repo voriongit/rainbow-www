@@ -11,8 +11,8 @@
  * Keyboard/touch fall back to the static chart gracefully.
  */
 
-import { useRef, useState } from 'react';
 import { fmtAxisTime, fmtNum, fmtDateTime } from '../../lib/format';
+import { useChartScrub } from './use-chart-scrub';
 
 export interface LinePoint {
   /** Timestamp ms */
@@ -39,6 +39,9 @@ interface LineChartProps {
   regression?: boolean;
   /** Label for the value in the hover card (e.g. "Score", "Accumulator") */
   valueLabel?: string;
+  /** Vertical event markers drawn at a timestamp (e.g. the Elbow — the bend
+   *  where the curve crosses into a discrete state change). */
+  markers?: { t: number; label: string; color: string }[];
 }
 
 const W = 640;
@@ -53,9 +56,9 @@ export function LineChart({
   thresholds = [],
   regression = false,
   valueLabel = 'Value',
+  markers = [],
 }: LineChartProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [hover, setHover] = useState<number | null>(null);
+  const { svgRef, hover, scrubHandlers } = useChartScrub();
 
   if (points.length === 0) return null;
 
@@ -120,23 +123,7 @@ export function LineChart({
   const yTicks = [0, 1, 2, 3].map((i) => yMin + (ySpan * i) / 3);
   const xTicks = [0, 1, 2, 3].map((i) => tMin + (tSpan * i) / 3);
 
-  function onMove(e: React.MouseEvent<SVGSVGElement>) {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width === 0) return;
-    const svgX = ((e.clientX - rect.left) / rect.width) * W;
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < points.length; i++) {
-      const d = Math.abs(x(points[i].t) - svgX);
-      if (d < bestD) {
-        bestD = d;
-        best = i;
-      }
-    }
-    setHover(best);
-  }
+  const handlers = scrubHandlers({ count: points.length, positionOf: (i) => x(points[i].t), width: W });
 
   const hp = hover != null ? points[hover] : null;
   const hx = hp ? x(hp.t) : 0;
@@ -153,9 +140,12 @@ export function LineChart({
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
         role="img"
-        aria-label="Time-series chart (hover for values)"
-        onMouseMove={onMove}
-        onMouseLeave={() => setHover(null)}
+        aria-label={
+          markers.length
+            ? `Time-series chart with ${markers.map((m) => m.label).join(', ')}; tap or hover for values`
+            : 'Time-series chart (tap or hover for values)'
+        }
+        {...handlers}
       >
         <defs>
           <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
@@ -218,6 +208,40 @@ export function LineChart({
             strokeDasharray="2 4"
           />
         )}
+
+        {/* Event markers (e.g. the Elbow) — drawn over the series, under the
+            hover crosshair so scrubbing stays on top. */}
+        {markers
+          .filter((mk) => mk.t >= tMin && mk.t <= tMax)
+          .map((mk) => {
+            const mx = x(mk.t);
+            const leftPct = (mx / W) * 100;
+            const atEnd = leftPct > 70;
+            return (
+              <g key={mk.label} pointerEvents="none">
+                <line
+                  x1={mx}
+                  x2={mx}
+                  y1={PAD.top}
+                  y2={PAD.top + innerH}
+                  stroke={mk.color}
+                  strokeWidth="1.5"
+                  strokeDasharray="2 2"
+                />
+                <circle cx={mx} cy={PAD.top + 5} r="3" fill={mk.color} stroke="#05050a" strokeWidth="1" />
+                <text
+                  x={mx + (atEnd ? -5 : 5)}
+                  y={PAD.top + 9}
+                  textAnchor={atEnd ? 'end' : 'start'}
+                  fontSize="9"
+                  fontWeight="600"
+                  fill={mk.color}
+                >
+                  {mk.label}
+                </text>
+              </g>
+            );
+          })}
 
         {/* Hover crosshair + marker */}
         {hp && (

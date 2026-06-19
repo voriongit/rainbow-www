@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Keep mobile Safari from auto-inflating text in landscape. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Suppress the browser's own pull-to-refresh / overscroll glow so our
+     gesture layer (and a stable cockpit feel) own vertical overscroll. */
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* App-like cross-fade on route navigations (Next experimental viewTransition). */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+/* Honor reduced motion: kill View Transition animations entirely. (JS motion is
+   handled separately by MotionConfig reducedMotion="user".) */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
