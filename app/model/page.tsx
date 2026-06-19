@@ -19,6 +19,10 @@
 import type { Metadata } from 'next';
 import { Panel } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
+import {
+  ControlResolverSelector,
+  type ResolverControl,
+} from '../components/control-resolver-selector';
 import { STATUS } from '../lib/status-colors';
 import {
   OPERATION_MODES,
@@ -29,7 +33,9 @@ import {
   ENFORCEMENT_LAYERS,
   LAYER_BLURBS,
   LAYER_LABELS,
+  type ControlInput,
   type EnforcementLayer,
+  type OperationModeKey,
   type ResolvedEffect,
   type Verdict,
 } from '../lib/control/contract';
@@ -58,6 +64,48 @@ const EXEC_COLOR: Record<string, string> = {
   inline: STATUS.warn,
   deferred: STATUS.info,
 };
+
+// ── Interactive resolver: the URL-driven scope ──────────────────────────────
+//
+// The /model resolver is driven by five query params: ?mode, ?risk, ?tier,
+// ?channel, ?data. Each is clamped to a known enum below; anything unknown (or
+// absent) falls back to the DEFAULT, which reproduces the original hard-coded
+// example exactly — so a bare /model is byte-for-byte unchanged. This is still
+// strictly READ-ONLY: the params only choose which illustrative resolution the
+// reference merge *shows*; there is no apply/write path.
+
+const MODE_OPTIONS = OPERATION_MODES.map((m) => ({ value: m.key, label: m.label }));
+const RISK_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((v) => ({ value: v, label: v }));
+const TIER_OPTIONS = ['T2', 'T4', 'T6', 'T7'].map((v) => ({ value: v, label: v }));
+const CHANNEL_OPTIONS = [
+  { value: 'tool-call', label: 'tool-call' },
+  { value: 'a2a-bus', label: 'a2a-bus' },
+  { value: 'egress', label: 'egress' },
+];
+const DATA_OPTIONS = [
+  { value: 'public', label: 'public' },
+  { value: 'internal', label: 'internal' },
+  { value: 'restricted', label: 'restricted' },
+];
+
+// Defaults — chosen so a bare /model reproduces the original worked example.
+const DEFAULTS = {
+  mode: 'guarded' as OperationModeKey,
+  risk: 'CRITICAL',
+  tier: 'T6',
+  channel: 'egress',
+  data: 'restricted',
+} as const;
+
+/** Clamp a raw query value to a known option, defaulting when absent/unknown. */
+function clamp(
+  raw: string | string[] | undefined,
+  options: readonly { value: string }[],
+  fallback: string,
+): string {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return v && options.some((o) => o.value === v) ? v : fallback;
+}
 
 /** Small chip primitive — used for verdict, exec-mode, layer-mode, proof, origin. */
 function Chip({
@@ -112,21 +160,53 @@ function ProvenanceChips({ effect }: { effect: ResolvedEffect }) {
   );
 }
 
-export default function ControlModelPage() {
-  // An illustrative resolution chosen to show a stricter layer overriding intent:
-  // a high-tier agent in Guarded mode wants a CRITICAL spend over egress, but an
-  // industry floor is locked → the verdict is capped to a hard floor.
-  const exampleInput = {
-    mode: 'guarded' as const,
+interface ControlModelPageProps {
+  searchParams: Promise<{
+    mode?: string | string[];
+    risk?: string | string[];
+    tier?: string | string[];
+    channel?: string | string[];
+    data?: string | string[];
+  }>;
+}
+
+export default async function ControlModelPage({ searchParams }: ControlModelPageProps) {
+  // Resolve + clamp the URL-driven scope. Unknown/absent values fall back to the
+  // DEFAULTS, which reproduce the original worked example so a bare /model is
+  // unchanged. Everything below is still strictly read-only and synthetic.
+  const params = await searchParams;
+  const selected = {
+    mode: clamp(params.mode, MODE_OPTIONS, DEFAULTS.mode) as OperationModeKey,
+    risk: clamp(params.risk, RISK_OPTIONS, DEFAULTS.risk),
+    tier: clamp(params.tier, TIER_OPTIONS, DEFAULTS.tier),
+    channel: clamp(params.channel, CHANNEL_OPTIONS, DEFAULTS.channel),
+    data: clamp(params.data, DATA_OPTIONS, DEFAULTS.data),
+  };
+
+  // An illustrative resolution: a high-tier agent under the chosen mode attempts
+  // the chosen risk-class spend over the chosen channel/data, with a locked
+  // industry floor — so a stricter layer can cap the intent. agentId,
+  // actionClass and the industry floor stay fixed to keep the example legible.
+  const exampleInput: ControlInput = {
+    mode: selected.mode,
     agentId: 'cascade-03',
-    tier: 'T6',
-    riskClass: 'CRITICAL',
+    tier: selected.tier,
+    riskClass: selected.risk,
     actionClass: 'spend',
-    channel: 'egress',
-    dataSensitivity: 'restricted',
+    channel: selected.channel,
+    dataSensitivity: selected.data,
     industryFloor: true,
   };
   const result = simulatorControlPort.getEffectiveConfig(exampleInput);
+
+  // The five URL-driven controls, each clamped to a known enum (validated above).
+  const resolverControls: ResolverControl[] = [
+    { param: 'mode', label: 'Operation mode', options: MODE_OPTIONS, current: selected.mode },
+    { param: 'risk', label: 'Risk class', options: RISK_OPTIONS, current: selected.risk },
+    { param: 'tier', label: 'Trust tier', options: TIER_OPTIONS, current: selected.tier },
+    { param: 'channel', label: 'Channel', options: CHANNEL_OPTIONS, current: selected.channel },
+    { param: 'data', label: 'Data sensitivity', options: DATA_OPTIONS, current: selected.data },
+  ];
 
   // Group resolved effects by the layer that carries them, for the three lanes.
   const effectsByLayer: Record<EnforcementLayer, ResolvedEffect[]> = {
@@ -275,13 +355,16 @@ export default function ControlModelPage() {
         </Panel>
       </section>
 
-      {/* (c) Example effective-config resolution — three stacked lanes */}
+      {/* (c) Interactive effective-config resolution — three stacked lanes */}
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-white/50">
-          Example resolution
+          Interactive resolution
         </h2>
         <p className="max-w-3xl text-xs leading-relaxed text-white/45">
-          A worked example resolved by the reference merge. The input intent is{' '}
+          Pick an operation mode and an example scope below to explore — read-only — how the
+          reference merge resolves it across the three layers. The selection lives in the URL
+          (shareable, no storage); it only chooses which illustrative resolution is{' '}
+          <span className="italic">shown</span>, it applies nothing. The input intent is{' '}
           <span className="text-white/70">agent {exampleInput.agentId}</span> (tier{' '}
           {exampleInput.tier}) attempting a <span className="text-white/70">{exampleInput.riskClass}</span>{' '}
           <span className="text-white/70">{exampleInput.actionClass}</span> over{' '}
@@ -290,6 +373,15 @@ export default function ControlModelPage() {
           <span className="text-white/70">{exampleInput.mode}</span> mode, with a locked industry
           floor. Watch a stricter layer cap the intent.
         </p>
+
+        {/* URL-driven scope selectors (the only interactive surface; still read-only). */}
+        <Panel
+          title="Resolution scope"
+          subtitle="Choose a scope — read-only · shown, never applied"
+          badge={<Chip label="illustrative" color={STATUS.warnAlt} />}
+        >
+          <ControlResolverSelector controls={resolverControls} />
+        </Panel>
 
         {/* Verdict roll-up */}
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-3 text-sm">
