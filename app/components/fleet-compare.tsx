@@ -32,6 +32,20 @@ function lowShare(s: FleetSummaryLike | FleetProfile): number {
   return (low / s.totalAgents) * 100;
 }
 
+/** Signed delta that snaps a near-tie (|d| < 0.5, which rounds to 0) to ±0. */
+function fmtDelta(n: number): string {
+  return Math.abs(n) < 0.5 ? '±0' : fmtSigned(n, 0);
+}
+
+/** Color a delta by whether it moved in the "good" direction; neutral at a tie.
+ *  goodWhenPositive=true → higher is better (mean/median); false → lower is
+ *  better (low-trust share). */
+function deltaColor(n: number, goodWhenPositive: boolean): string | undefined {
+  if (Math.abs(n) < 0.5) return undefined;
+  const good = goodWhenPositive ? n > 0 : n < 0;
+  return good ? GOOD : BAD;
+}
+
 export function FleetCompare({
   live,
   reference,
@@ -59,20 +73,20 @@ export function FleetCompare({
         <Stat
           label="Fleet mean trust"
           value={fmtNum(live.averageScore)}
-          color={dMean >= 0 ? GOOD : BAD}
-          sub={`ref ${fmtNum(reference.averageScore)} · Δ ${fmtSigned(dMean, 0)}`}
+          color={deltaColor(dMean, true)}
+          sub={`ref ${fmtNum(reference.averageScore)} · Δ ${fmtDelta(dMean)}`}
         />
         <Stat
           label="Median trust"
           value={fmtNum(live.medianScore)}
-          color={dMedian >= 0 ? GOOD : BAD}
-          sub={`ref ${fmtNum(reference.medianScore)} · Δ ${fmtSigned(dMedian, 0)}`}
+          color={deltaColor(dMedian, true)}
+          sub={`ref ${fmtNum(reference.medianScore)} · Δ ${fmtDelta(dMedian)}`}
         />
         <Stat
           label="Low-trust share (T0–T2)"
           value={`${Math.round(liveLow)}%`}
-          color={dLow <= 0 ? GOOD : BAD}
-          sub={`ref ${Math.round(refLow)}% · Δ ${fmtSigned(dLow, 0)}pp`}
+          color={deltaColor(dLow, false)}
+          sub={`ref ${Math.round(refLow)}% · Δ ${fmtDelta(dLow)}pp`}
         />
       </div>
 
@@ -80,7 +94,7 @@ export function FleetCompare({
       <div>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <span className="text-xs font-semibold text-white/80">Tier distribution</span>
-          <span className="text-[11px] text-white/45">
+          <span className="text-[11px] text-white/55">
             bar = this fleet&apos;s share of each tier · tick = reference fleet&apos;s share
           </span>
         </div>
@@ -100,7 +114,7 @@ export function FleetCompare({
                   <span className="text-xs font-semibold tabular-nums" style={{ color }}>
                     {t}
                   </span>
-                  <span className="hidden truncate text-[10px] text-white/40 sm:inline">
+                  <span className="hidden truncate text-[10px] text-white/55 sm:inline">
                     {tierName(t)}
                   </span>
                 </div>
@@ -117,7 +131,7 @@ export function FleetCompare({
                 </div>
                 <div className="flex w-24 shrink-0 items-baseline justify-end gap-2 tabular-nums">
                   <span className="text-xs text-white/80">{Math.round(ls)}%</span>
-                  <span className="text-[10px] text-white/40">ref {Math.round(rs)}%</span>
+                  <span className="text-[10px] text-white/55">ref {Math.round(rs)}%</span>
                 </div>
               </div>
             );

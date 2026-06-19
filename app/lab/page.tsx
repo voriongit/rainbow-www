@@ -56,8 +56,10 @@ export default async function LabPage({ searchParams }: PageProps) {
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
 
   // Modeled-policy knobs, validated + clamped from the URL (no browser storage).
-  // Each falls back to the prior default, so a bare /lab is byte-identical to
-  // before. These select the routing/trigger overlay ONLY — never the sim/trust.
+  // Each falls back to the prior default, so the delegation MODEL for a bare
+  // /lab is unchanged — every pre-existing panel renders identically (the new
+  // impact block below is purely additive). These select the routing/trigger
+  // overlay ONLY — never the sim/trust.
   const handlerCount = clampHandlerCount(
     sp.handlers !== undefined ? Number(sp.handlers) : DEFAULT_HANDLER_COUNT
   );

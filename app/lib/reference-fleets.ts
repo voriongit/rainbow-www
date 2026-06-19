@@ -55,7 +55,7 @@ export const REFERENCE_FLEETS: readonly FleetProfile[] = [
   ),
   profile(
     'baseline',
-    'Industry baseline',
+    'Mid-trust mix',
     'A middling reference mix — trust clusters around the middle tiers with a tail in both directions.',
     { T6: 2, T5: 5, T4: 6, T3: 4, T2: 2, T1: 1 },
     550,
