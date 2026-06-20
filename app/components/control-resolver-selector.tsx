@@ -61,7 +61,7 @@ export function ControlResolverSelector({ controls }: ControlResolverSelectorPro
         return (
           <Fragment key={control.param}>
             {newGroup && (
-              <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45 first:mt-0">
+              <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55 first:mt-0">
                 {control.group}
               </span>
             )}

@@ -266,7 +266,7 @@ export default async function ControlCardPage({ params, searchParams }: PageProp
                         </div>
                         <p className="mt-1 text-[11px] leading-relaxed text-white/55">
                           {e.rationale}{' '}
-                          <span className="text-white/45">— decided by {e.decidedBy}.</span>
+                          <span className="text-white/55">— decided by {e.decidedBy}.</span>
                         </p>
                         <div className="mt-2">
                           <ProvenanceChips effect={e} />

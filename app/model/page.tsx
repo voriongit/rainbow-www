@@ -67,8 +67,10 @@ const EXEC_COLOR: Record<string, string> = {
 
 // ── Interactive resolver: the URL-driven scope ──────────────────────────────
 //
-// The /model resolver is driven by five query params: ?mode, ?risk, ?tier,
-// ?channel, ?data. Each is clamped to a known enum below; anything unknown (or
+// The /model resolver is driven by URL query params across the full taxonomy —
+// the scope dimensions (?mode, ?risk, ?tier, ?channel, ?data, ?action, ?agent,
+// ?a2a, ?factor, ?time) plus the three floors (?lockdown, ?industry, ?override).
+// Each is clamped to a known enum below; anything unknown (or
 // absent) falls back to the DEFAULT, which reproduces the original hard-coded
 // example exactly — so a bare /model is byte-for-byte unchanged. This is still
 // strictly READ-ONLY: the params only choose which illustrative resolution the
@@ -264,7 +266,7 @@ export default async function ControlModelPage({ searchParams }: ControlModelPag
   };
   const result = simulatorControlPort.getEffectiveConfig(exampleInput);
 
-  // The five URL-driven controls, each clamped to a known enum (validated above).
+  // The URL-driven controls (full taxonomy: scope + floors), each clamped to a known enum (validated above).
   const resolverControls: ResolverControl[] = [
     { param: 'mode', label: 'Operation mode', options: MODE_OPTIONS, current: selected.mode, group: 'Scope' },
     { param: 'risk', label: 'Risk class', options: RISK_OPTIONS, current: selected.risk, group: 'Scope' },
