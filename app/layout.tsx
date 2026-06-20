@@ -27,6 +27,8 @@ const STATIC_PAGES: CommandItem[] = [
   { kind: 'page', label: 'Compare agents', href: '/compare' },
   { kind: 'page', label: 'Benchmark fleet', href: '/benchmark' },
   { kind: 'page', label: 'Control model', href: '/model' },
+  { kind: 'page', label: 'Control: per-agent', href: '/control' },
+  { kind: 'page', label: 'A2A network', href: '/network' },
   { kind: 'page', label: 'Proof chain', href: '/proof' },
   { kind: 'page', label: 'Shareable report', href: '/report' },
   { kind: 'page', label: 'Embeddable widgets', href: '/embed' },
