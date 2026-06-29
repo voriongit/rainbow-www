@@ -1,0 +1,13 @@
+{
+  // Cloudflare Workers config for the OpenNext build of rainbow-www.
+  // Generated assets live in .open-next/ (git-ignored); produced by `npm run build:cf`.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rainbow-www",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  }
+}
