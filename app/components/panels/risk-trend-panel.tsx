@@ -21,7 +21,7 @@ const TREND_COLORS = {
   stable: '#94a3b8',
 } as const;
 
-/** Rolling 24h risk accumulator — corrected P(T) × R contributions */
+/** Rolling 24h risk accumulator — canonical P(T) × R from @vorionsys/rainbow */
 export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps) {
   const trendColor = TREND_COLORS[risk.trend];
   const yMax = Math.max(risk.peakInWindow * 1.2, RISK_ACCUMULATOR.degradedThreshold * 1.15);
@@ -60,7 +60,7 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
           </span>
         </ExploreLink>
       }
-      footnote={`Corrected accumulator: each failure contributes P(T) × R per the BASIS canonical formula (P(T) = 3 + tier at STANDARD posture). The library's R-only proxy is replaced pending rainbow-decontaminate (#3). Thresholds: warning ≥ ${RISK_ACCUMULATOR.warningThreshold}, degraded ≥ ${RISK_ACCUMULATOR.degradedThreshold}, circuit breaker ≥ ${RISK_ACCUMULATOR.cbThreshold}.`}
+      footnote={`Each failure contributes P(T) × R per the BASIS canonical formula (P(T) = 3 + tier at STANDARD posture), computed by @vorionsys/rainbow. Thresholds: warning ≥ ${RISK_ACCUMULATOR.warningThreshold}, degraded ≥ ${RISK_ACCUMULATOR.degradedThreshold}, circuit breaker ≥ ${RISK_ACCUMULATOR.cbThreshold}.`}
     >
       {risk.samples.length === 0 ? (
         <EmptyState message={`No signals for ${agentId} in the last ${duration}.`} />
