@@ -16,7 +16,7 @@
  */
 
 import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { Fragment, useTransition } from 'react';
 
 /** One selectable dimension: a query key + its allowed values (validated server-side too). */
 export interface ResolverControl {
@@ -28,6 +28,8 @@ export interface ResolverControl {
   options: { value: string; label: string }[];
   /** Currently selected value (already validated/clamped by the page). */
   current: string;
+  /** Optional group heading, rendered once above the first control of a new group. */
+  group?: string;
 }
 
 interface ControlResolverSelectorProps {
@@ -54,37 +56,45 @@ export function ControlResolverSelector({ controls }: ControlResolverSelectorPro
       role="group"
       aria-label="Illustrative resolution scope (read-only)"
     >
-      {controls.map((control) => (
-        <div key={control.param} className="flex flex-col gap-1.5">
-          <span className="text-[11px] uppercase tracking-wider text-white/40">
-            {control.label}
-          </span>
-          <div className="flex flex-wrap gap-1">
-            {control.options.map((opt) => {
-              const selected = opt.value === control.current;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() =>
-                    startTransition(() => {
-                      router.push(hrefWith(control.param, opt.value), { scroll: false });
-                    })
-                  }
-                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
-                    selected
-                      ? 'border-white/20 bg-white/10 text-white'
-                      : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+      {controls.map((control, i) => {
+        const newGroup = !!control.group && control.group !== controls[i - 1]?.group;
+        return (
+          <Fragment key={control.param}>
+            {newGroup && (
+              <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/55 first:mt-0">
+                {control.group}
+              </span>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wider text-white/55">{control.label}</span>
+              <div className="flex flex-wrap gap-1">
+                {control.options.map((opt) => {
+                  const selected = opt.value === control.current;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        startTransition(() => {
+                          router.push(hrefWith(control.param, opt.value), { scroll: false });
+                        })
+                      }
+                      className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        selected
+                          ? 'border-white/20 bg-white/10 text-white'
+                          : 'border-white/10 bg-white/[0.02] text-white/50 hover:text-white/80'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }

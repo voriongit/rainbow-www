@@ -67,8 +67,10 @@ const EXEC_COLOR: Record<string, string> = {
 
 // ── Interactive resolver: the URL-driven scope ──────────────────────────────
 //
-// The /model resolver is driven by five query params: ?mode, ?risk, ?tier,
-// ?channel, ?data. Each is clamped to a known enum below; anything unknown (or
+// The /model resolver is driven by URL query params across the full taxonomy —
+// the scope dimensions (?mode, ?risk, ?tier, ?channel, ?data, ?action, ?agent,
+// ?a2a, ?factor, ?time) plus the three floors (?lockdown, ?industry, ?override).
+// Each is clamped to a known enum below; anything unknown (or
 // absent) falls back to the DEFAULT, which reproduces the original hard-coded
 // example exactly — so a bare /model is byte-for-byte unchanged. This is still
 // strictly READ-ONLY: the params only choose which illustrative resolution the
@@ -87,14 +89,58 @@ const DATA_OPTIONS = [
   { value: 'internal', label: 'internal' },
   { value: 'restricted', label: 'restricted' },
 ];
+const ACTION_OPTIONS = ['read', 'write', 'spend', 'deploy'].map((v) => ({ value: v, label: v }));
+const AGENT_OPTIONS = [
+  { value: 'on', label: 'pinned' },
+  { value: 'off', label: 'off' },
+];
+const A2A_OPTIONS = [
+  { value: 'none', label: 'none' },
+  { value: 'cascade-03→atlas-01', label: 'cascade-03→atlas-01' },
+];
+const FACTOR_OPTIONS = [
+  { value: 'none', label: 'none' },
+  { value: 'CT-SEC', label: 'CT-SEC' },
+  { value: 'CT-ID', label: 'CT-ID' },
+];
+const TIME_OPTIONS = [
+  { value: 'none', label: 'none' },
+  { value: 'business-hours', label: 'business-hours' },
+  { value: 'change-freeze', label: 'change-freeze' },
+  { value: 'incident', label: 'incident' },
+];
+const LOCKDOWN_OPTIONS = [
+  { value: 'off', label: 'off' },
+  { value: 'on', label: 'on' },
+];
+const INDUSTRY_OPTIONS = [
+  { value: 'on', label: 'on' },
+  { value: 'off', label: 'off' },
+];
+const OVERRIDE_OPTIONS = [
+  { value: 'none', label: 'none' },
+  { value: 'allow', label: 'allow' },
+  { value: 'tighten', label: 'tighten' },
+  { value: 'deny', label: 'deny' },
+];
 
-// Defaults — chosen so a bare /model reproduces the original worked example.
+// Defaults — chosen so a bare /model reproduces the original worked example
+// byte-for-byte (agent pinned, industry floor on, action 'spend', no other
+// scopes/floors active), even though every dimension is now reachable.
 const DEFAULTS = {
   mode: 'guarded' as OperationModeKey,
   risk: 'CRITICAL',
   tier: 'T6',
   channel: 'egress',
   data: 'restricted',
+  action: 'spend',
+  agent: 'on',
+  a2a: 'none',
+  factor: 'none',
+  time: 'none',
+  lockdown: 'off',
+  industry: 'on',
+  override: 'none',
 } as const;
 
 /** Clamp a raw query value to a known option, defaulting when absent/unknown. */
@@ -167,6 +213,14 @@ interface ControlModelPageProps {
     tier?: string | string[];
     channel?: string | string[];
     data?: string | string[];
+    action?: string | string[];
+    agent?: string | string[];
+    a2a?: string | string[];
+    factor?: string | string[];
+    time?: string | string[];
+    lockdown?: string | string[];
+    industry?: string | string[];
+    override?: string | string[];
   }>;
 }
 
@@ -181,6 +235,14 @@ export default async function ControlModelPage({ searchParams }: ControlModelPag
     tier: clamp(params.tier, TIER_OPTIONS, DEFAULTS.tier),
     channel: clamp(params.channel, CHANNEL_OPTIONS, DEFAULTS.channel),
     data: clamp(params.data, DATA_OPTIONS, DEFAULTS.data),
+    action: clamp(params.action, ACTION_OPTIONS, DEFAULTS.action),
+    agent: clamp(params.agent, AGENT_OPTIONS, DEFAULTS.agent),
+    a2a: clamp(params.a2a, A2A_OPTIONS, DEFAULTS.a2a),
+    factor: clamp(params.factor, FACTOR_OPTIONS, DEFAULTS.factor),
+    time: clamp(params.time, TIME_OPTIONS, DEFAULTS.time),
+    lockdown: clamp(params.lockdown, LOCKDOWN_OPTIONS, DEFAULTS.lockdown),
+    industry: clamp(params.industry, INDUSTRY_OPTIONS, DEFAULTS.industry),
+    override: clamp(params.override, OVERRIDE_OPTIONS, DEFAULTS.override),
   };
 
   // An illustrative resolution: a high-tier agent under the chosen mode attempts
@@ -189,23 +251,36 @@ export default async function ControlModelPage({ searchParams }: ControlModelPag
   // actionClass and the industry floor stay fixed to keep the example legible.
   const exampleInput: ControlInput = {
     mode: selected.mode,
-    agentId: 'cascade-03',
+    agentId: selected.agent === 'on' ? 'cascade-03' : undefined,
     tier: selected.tier,
     riskClass: selected.risk,
-    actionClass: 'spend',
+    actionClass: selected.action,
     channel: selected.channel,
     dataSensitivity: selected.data,
-    industryFloor: true,
+    a2aRelationship: selected.a2a === 'none' ? undefined : selected.a2a,
+    factor: selected.factor === 'none' ? undefined : selected.factor,
+    timeWindow: selected.time === 'none' ? undefined : selected.time,
+    industryFloor: selected.industry === 'on',
+    kernelLockdown: selected.lockdown === 'on',
+    humanOverride: selected.override === 'none' ? undefined : (selected.override as Verdict),
   };
   const result = simulatorControlPort.getEffectiveConfig(exampleInput);
 
-  // The five URL-driven controls, each clamped to a known enum (validated above).
+  // The URL-driven controls (full taxonomy: scope + floors), each clamped to a known enum (validated above).
   const resolverControls: ResolverControl[] = [
-    { param: 'mode', label: 'Operation mode', options: MODE_OPTIONS, current: selected.mode },
-    { param: 'risk', label: 'Risk class', options: RISK_OPTIONS, current: selected.risk },
-    { param: 'tier', label: 'Trust tier', options: TIER_OPTIONS, current: selected.tier },
-    { param: 'channel', label: 'Channel', options: CHANNEL_OPTIONS, current: selected.channel },
-    { param: 'data', label: 'Data sensitivity', options: DATA_OPTIONS, current: selected.data },
+    { param: 'mode', label: 'Operation mode', options: MODE_OPTIONS, current: selected.mode, group: 'Scope' },
+    { param: 'risk', label: 'Risk class', options: RISK_OPTIONS, current: selected.risk, group: 'Scope' },
+    { param: 'tier', label: 'Trust tier', options: TIER_OPTIONS, current: selected.tier, group: 'Scope' },
+    { param: 'channel', label: 'Channel', options: CHANNEL_OPTIONS, current: selected.channel, group: 'Scope' },
+    { param: 'data', label: 'Data sensitivity', options: DATA_OPTIONS, current: selected.data, group: 'Scope' },
+    { param: 'action', label: 'Action class / capability', options: ACTION_OPTIONS, current: selected.action, group: 'Advanced scope' },
+    { param: 'agent', label: 'Per-agent pin', options: AGENT_OPTIONS, current: selected.agent, group: 'Advanced scope' },
+    { param: 'a2a', label: 'A2A relationship', options: A2A_OPTIONS, current: selected.a2a, group: 'Advanced scope' },
+    { param: 'factor', label: 'Trust factor', options: FACTOR_OPTIONS, current: selected.factor, group: 'Advanced scope' },
+    { param: 'time', label: 'Time window', options: TIME_OPTIONS, current: selected.time, group: 'Advanced scope' },
+    { param: 'lockdown', label: 'Kernel lockdown (rank 0)', options: LOCKDOWN_OPTIONS, current: selected.lockdown, group: 'Floors — bind above the override line' },
+    { param: 'industry', label: 'Industry floor (rank 1)', options: INDUSTRY_OPTIONS, current: selected.industry, group: 'Floors — bind above the override line' },
+    { param: 'override', label: 'Human override (rank 2)', options: OVERRIDE_OPTIONS, current: selected.override, group: 'Floors — bind above the override line' },
   ];
 
   // Group resolved effects by the layer that carries them, for the three lanes.
@@ -365,13 +440,13 @@ export default async function ControlModelPage({ searchParams }: ControlModelPag
           reference merge resolves it across the three layers. The selection lives in the URL
           (shareable, no storage); it only chooses which illustrative resolution is{' '}
           <span className="italic">shown</span>, it applies nothing. The input intent is{' '}
-          <span className="text-white/70">agent {exampleInput.agentId}</span> (tier{' '}
+          <span className="text-white/70">agent {exampleInput.agentId ?? 'unpinned'}</span> (tier{' '}
           {exampleInput.tier}) attempting a <span className="text-white/70">{exampleInput.riskClass}</span>{' '}
           <span className="text-white/70">{exampleInput.actionClass}</span> over{' '}
           <span className="text-white/70">{exampleInput.channel}</span> on{' '}
           <span className="text-white/70">{exampleInput.dataSensitivity}</span> data, under{' '}
-          <span className="text-white/70">{exampleInput.mode}</span> mode, with a locked industry
-          floor. Watch a stricter layer cap the intent.
+          <span className="text-white/70">{exampleInput.mode}</span> mode. Toggle the floors and
+          scopes below and watch a stricter layer cap the intent.
         </p>
 
         {/* URL-driven scope selectors (the only interactive surface; still read-only). */}
