@@ -20,6 +20,10 @@ npm-debug.log*
 .env*
 !.env.example
 
+# cloudflare / opennext
+.open-next/
+.wrangler/
+
 # vercel
 .vercel
 

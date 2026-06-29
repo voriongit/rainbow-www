@@ -3,7 +3,7 @@
 
 /**
  * Trust tier display helpers. Tier boundaries come from the canonical
- * `@vorionsys/basis` TRUST_TIERS; only the colors are presentation-local.
+ * `@vorionsys/basis-spec` TRUST_TIERS; only the colors are presentation-local.
  */
 
 import { TRUST_TIERS } from '@vorionsys/basis-spec';
