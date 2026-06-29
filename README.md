@@ -28,10 +28,9 @@ enforcement actions and no mutation paths to trust data.
   `loss = −P(T) × R × gainRate × ln(1 + C/2)`). Archetypes (steady, rising,
   degrading, erratic, CB-trip-and-recover, dormant, compromised cluster) are
   scripted to exercise every analytics surface.
-- **Corrected risk accumulator** (`app/lib/corrected-risk-trend.ts`): replays the
-  rolling 24h accumulator with the canonical per-failure contribution
-  **P(T) × R** instead of the R-only proxy in `@vorionsys/rainbow@0.1.0`.
-  Delete once the decontamination pass lands in the library.
+- **Risk accumulator** (`app/lib/corrected-risk-trend.ts`): a thin display adapter
+  over the library's canonical **P(T) × R** `computeRiskTrend` (`@vorionsys/rainbow`),
+  adding pre-window seeding so the rolling 24h metric is window-correct.
 - **Charts** are server-rendered SVG — zero chart-library JS on the client.
 
 ### Read-only API
@@ -44,8 +43,9 @@ enforcement actions and no mutation paths to trust data.
 
 ## Seams for upstream work
 
-- **#3 rainbow-decontaminate** — swap `corrected-risk-trend.ts` for the library's
-  corrected `computeRiskTrend`.
+- **#3 rainbow-decontaminate** — done: the decontamination landed in
+  `@vorionsys/rainbow` (0.2.x/0.3.0); the dashboard consumes the library's canonical
+  `computeRiskTrend` from npm and keeps only a thin seeding/windowing adapter.
 - **#5 persistent store** — construct `Rainbow` with a Supabase-backed
   `WindowStore` in `app/lib/data-source.ts`; the accessors only depend on the
   facade surface. Keys stay in env (`SUPABASE_URL`, anon key + RLS); the
@@ -56,9 +56,9 @@ enforcement actions and no mutation paths to trust data.
 
 ## Dependency note
 
-`@vorionsys/rainbow` is not yet published to npm; it is vendored as a packed
-tarball under `vendor/` and installed via a `file:` dependency. When the
-package publishes, replace the `file:` spec with the registry version.
+`@vorionsys/rainbow` is consumed from npm (`^0.3.0`). It was previously vendored as a
+packed tarball under `vendor/` (a `file:` dependency) while unpublished; now that the
+package is published, that has been replaced with the registry version.
 
 ## Develop
 

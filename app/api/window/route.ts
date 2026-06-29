@@ -3,8 +3,9 @@
 
 /**
  * Read-only: windowed analytics for one agent (or fleet-wide aggregate).
- * `riskTrend` inside `window` is the library computation; `correctedRiskTrend`
- * applies the canonical P(T) × R contribution (see lib/corrected-risk-trend).
+ * Both `window.riskTrend` and `correctedRiskTrend` use the canonical P(T) × R
+ * accumulator from @vorionsys/rainbow; `correctedRiskTrend` additionally seeds and
+ * trims the rolling 24h window for sub-24h accuracy (see lib/corrected-risk-trend).
  *
  * Query: ?window=1h|6h|24h|7d|30d & agent=<agentId>
  */
