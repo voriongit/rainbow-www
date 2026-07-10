@@ -40,7 +40,7 @@ export function AgentSelector({ agents, current, duration }: AgentSelectorProps)
             );
           })
         }
-        className={`rounded-lg border border-white/10 bg-[#0c0c14] px-3 py-1.5 text-xs font-medium text-white outline-none focus:border-white/30 ${
+        className={`max-w-[72vw] rounded-lg border border-white/10 bg-[#0c0c14] px-3 py-1.5 text-base sm:text-xs font-medium text-white outline-none focus:border-white/30 ${
           isPending ? 'opacity-60' : ''
         }`}
       >

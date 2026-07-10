@@ -44,7 +44,7 @@ const TIER_OPTIONS = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const LIFECYCLE_OPTIONS = ['ACTIVE', 'DEGRADED', 'TRIPPED'];
 
 const SELECT_CLASS =
-  'rounded-md border border-white/10 bg-white/[0.02] px-2 py-1 text-xs text-white/85 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30';
+  'max-w-full rounded-md border border-white/10 bg-white/[0.02] px-2 py-1 text-base sm:text-xs text-white/85 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30';
 
 export function FleetRoster({
   agents,
@@ -77,7 +77,7 @@ export function FleetRoster({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search agent or archetype…"
           aria-label="Search by agent ID or archetype"
-          className="min-w-[12rem] flex-1 rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 text-xs text-white/85 placeholder:text-white/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
+          className="min-w-[12rem] flex-1 rounded-md border border-white/10 bg-white/[0.02] px-2.5 py-1 text-base sm:text-xs text-white/85 placeholder:text-white/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
         />
         <select
           value={tierFilter}
