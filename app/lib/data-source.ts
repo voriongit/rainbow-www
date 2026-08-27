@@ -35,6 +35,13 @@ import {
 } from '@vorionsys/rainbow';
 import { FleetSimulator, type SimAgentInfo } from './simulator';
 import {
+  LiveFleetSource,
+  SimulatedFleetSource,
+  type FleetSource,
+  type SourceMode,
+} from './fleet-source';
+import { SupabaseWindowStore } from './supabase-window-store';
+import {
   computeCorrectedRiskTrend,
   RISK_SEED_WINDOW_MS,
 } from './corrected-risk-trend';
@@ -53,29 +60,146 @@ export function isPresetDuration(value: unknown): value is PresetDuration {
   return typeof value === 'string' && value in WINDOW_DURATION_MS;
 }
 
-interface Source {
-  sim: FleetSimulator;
+interface ReadSource {
+  source: FleetSource;
   rainbow: Rainbow;
 }
 
-const globalCache = globalThis as unknown as { __rainbowDemoSource?: Source };
+/** What the site is actually serving right now, derived — never hardcoded. */
+export interface Provenance {
+  mode: SourceMode;
+  /** Signals currently loaded. */
+  signalCount: number;
+  agentCount: number;
+  /** Why this mode was chosen, in words fit to show a reader. */
+  reason: string;
+}
 
-function getSource(): Source {
-  if (!globalCache.__rainbowDemoSource) {
-    let simRef: FleetSimulator | undefined;
-    const rainbow = new Rainbow({
-      // Exact initial scores from the simulator's own timeline
-      resolveInitialScore: (agentId, at) => simRef?.resolveScoreAt(agentId, at) ?? 0,
-    });
-    simRef = new FleetSimulator({
-      seed: SEED,
-      historyDays: HISTORY_DAYS,
-      now: new Date(),
-      onSignal: (signal) => rainbow.collector.ingest(signal),
-    });
-    globalCache.__rainbowDemoSource = { sim: simRef, rainbow };
+const globalCache = globalThis as unknown as {
+  __rainbowSource?: ReadSource;
+  __rainbowStore?: SupabaseWindowStore;
+  __rainbowHydration?: Promise<number>;
+};
+
+/**
+ * The persistent store, when one is configured. Returns undefined otherwise —
+ * a missing store is a normal deployment state, not an error.
+ */
+function getStore(): SupabaseWindowStore | undefined {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return undefined;
+  globalCache.__rainbowStore ??= new SupabaseWindowStore({ url, serviceKey });
+  return globalCache.__rainbowStore;
+}
+
+/** The store, for the ingest route. Undefined when none is configured. */
+export function getIngestStore(): SupabaseWindowStore | undefined {
+  return getStore();
+}
+
+/**
+ * Drop the cached read source so the next read re-derives its mode.
+ *
+ * Called after ingest: the very first real signal has to be able to flip the
+ * site from simulated to live within the same process, rather than waiting for
+ * a cold start.
+ */
+export function invalidateSource(): void {
+  globalCache.__rainbowSource = undefined;
+}
+
+/**
+ * Load persisted signals into the store's mirror, once per process.
+ *
+ * Async because the read path is synchronous by interface (WindowStore), so
+ * hydration has to happen at an explicit boundary. Async entry points (the
+ * API routes) await this so their first response is already live; a failure
+ * is logged and reported as zero signals, which degrades to the simulator
+ * with a stated reason rather than serving a silently empty fleet.
+ */
+export function ensureHydrated(): Promise<number> {
+  const store = getStore();
+  if (!store) return Promise.resolve(0);
+  globalCache.__rainbowHydration ??= store.hydrate().catch((err) => {
+    console.error('[rainbow] hydrate failed - falling back to the simulator:', err);
+    return 0;
+  });
+  return globalCache.__rainbowHydration;
+}
+
+/**
+ * Live only when a store is configured AND it actually holds signals.
+ *
+ * A configured-but-empty store reports as simulated with a reason rather than
+ * as an empty real fleet: an empty dashboard reads as "the fleet is healthy"
+ * when the truth is "nothing has reported yet".
+ */
+function computeProvenance(): Provenance {
+  const store = getStore();
+  if (!store) {
+    return {
+      mode: 'simulated',
+      signalCount: 0,
+      agentCount: 0,
+      reason: 'No signal store configured - showing the seeded demo fleet.',
+    };
   }
-  return globalCache.__rainbowDemoSource;
+  const agentCount = store.agentIds().length;
+  const signalCount = store.size;
+  if (signalCount === 0) {
+    return {
+      mode: 'simulated',
+      signalCount: 0,
+      agentCount: 0,
+      reason: 'Signal store configured but empty - no agent has reported yet.',
+    };
+  }
+  return {
+    mode: 'live',
+    signalCount,
+    agentCount,
+    reason: `Live telemetry from ${agentCount} reporting agent${agentCount === 1 ? '' : 's'}.`,
+  };
+}
+
+/**
+ * Provenance for the current request.
+ *
+ * Memoized per render: it is read by the page, by every API route, and by
+ * getSource() itself, and recomputing it each time would re-walk the store.
+ */
+export const getProvenance = cache(computeProvenance);
+
+function getSource(): ReadSource {
+  const provenance = getProvenance();
+  const cached = globalCache.__rainbowSource;
+  if (cached && cached.source.mode === provenance.mode) return cached;
+
+  if (provenance.mode === 'live') {
+    const store = getStore()!;
+    const live = new LiveFleetSource(store);
+    const rainbow = new Rainbow({
+      store,
+      resolveInitialScore: (agentId, at) => live.resolveScoreAt(agentId, at),
+    });
+    globalCache.__rainbowSource = { source: live, rainbow };
+    return globalCache.__rainbowSource;
+  }
+
+  let simRef: FleetSimulator | undefined;
+  const rainbow = new Rainbow({
+    // Exact initial scores from the simulator's own timeline
+    resolveInitialScore: (agentId, at) => simRef?.resolveScoreAt(agentId, at) ?? 0,
+  });
+  simRef = new FleetSimulator({
+    seed: SEED,
+    historyDays: HISTORY_DAYS,
+    now: new Date(),
+    onSignal: (signal) => rainbow.collector.ingest(signal),
+  });
+  globalCache.__rainbowSource = { source: new SimulatedFleetSource(simRef), rainbow };
+  return globalCache.__rainbowSource;
 }
 
 // ----------------------------------------------------------------------------
@@ -96,9 +220,9 @@ function getSource(): Source {
 const getNow = cache((): Date => new Date());
 
 /** The source with the simulated stream advanced to `now` — once per request. */
-const getReadySource = cache((): Source => {
+const getReadySource = cache((): ReadSource => {
   const src = getSource();
-  src.sim.ensureUpTo(getNow());
+  src.source.ensureUpTo(getNow());
   return src;
 });
 
@@ -135,10 +259,10 @@ export interface DashboardData {
 
 /** Everything the dashboard page needs, in one read pass. */
 export function getDashboardData(durationRaw?: string, agentRaw?: string): DashboardData {
-  const { sim, rainbow } = getReadySource();
+  const { source: fleetSource, rainbow } = getReadySource();
   const now = getNow();
 
-  const agents = sim.agents();
+  const agents = fleetSource.agents();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const requested = agents.find((a) => a.agentId === agentRaw);
   const agentInfo =
@@ -162,7 +286,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   const fleetWindowSignals = rainbow.collector.queryAll(from, now);
   const fleet = rainbow.getOrchestrationSnapshot(
     {
-      agentScores: sim.currentScores(),
+      agentScores: fleetSource.currentScores(),
       correlationAlerts: deriveCorrelationAlerts(fleetWindowSignals),
       escalationEvents: [],
     },
@@ -203,7 +327,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
 
 /** Roster of simulated agents (read-only) */
 export function getAgents(): SimAgentInfo[] {
-  return getReadySource().sim.agents();
+  return getReadySource().source.agents();
 }
 
 /** Windowed analytics for one agent (or fleet-wide when agentId omitted) */
@@ -231,11 +355,11 @@ export function getAgentRiskTrend(durationRaw?: string, agentId?: string): RiskT
 
 /** Fleet-wide orchestration snapshot */
 export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
-  const { sim, rainbow } = getReadySource();
+  const { source: fleetSource, rainbow } = getReadySource();
   const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   return rainbow.getOrchestrationSnapshot(
-    { agentScores: sim.currentScores(), correlationAlerts: [], escalationEvents: [] },
+    { agentScores: fleetSource.currentScores(), correlationAlerts: [], escalationEvents: [] },
     { duration },
     now
   );
@@ -304,12 +428,12 @@ export function getFleetSignals(
 
 /** One agent's roster info (or undefined if unknown). */
 export function getAgentInfo(agentId: string): SimAgentInfo | undefined {
-  return getReadySource().sim.agents().find((a) => a.agentId === agentId);
+  return getReadySource().source.agents().find((a) => a.agentId === agentId);
 }
 
 /** Agents currently resolving to a given tier key (T0–T7). */
 export function getTierMembers(tierKey: string): SimAgentInfo[] {
-  return getReadySource().sim.agents().filter((a) => a.tier === tierKey);
+  return getReadySource().source.agents().filter((a) => a.tier === tierKey);
 }
 
 export interface AgentSparkline {
@@ -320,9 +444,9 @@ export interface AgentSparkline {
 
 /** A compact score trajectory per agent, for fleet-roster sparklines. */
 export function getFleetSparklines(durationRaw?: string): AgentSparkline[] {
-  const { sim } = getReadySource();
+  const { source: fleetSource } = getReadySource();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
-  return sim.agents().map((a) => {
+  return fleetSource.agents().map((a) => {
     const samples = computeWindow(duration, a.agentId).trajectory.samples;
     const step = Math.max(1, Math.ceil(samples.length / 24));
     const points = samples
@@ -373,7 +497,7 @@ function buildDelegation(
   escalations: EscalationEvent[];
   now: Date;
 } {
-  const { sim, rainbow } = getReadySource();
+  const { source: fleetSource, rainbow } = getReadySource();
   const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
@@ -383,8 +507,8 @@ function buildDelegation(
   // `resolveScoreAt` trust trajectories below are untouched, so the underlying
   // synthetic sim/trust stays byte-identical regardless of the policy.
   const service = new DelegationService({
-    agentIds: sim.agents().map((a) => a.agentId),
-    trustAt: (agentId, at) => sim.resolveScoreAt(agentId, at),
+    agentIds: fleetSource.agents().map((a) => a.agentId),
+    trustAt: (agentId, at) => fleetSource.resolveScoreAt(agentId, at),
     handlerCount: policy?.handlerCount,
     leadRouting: policy?.leadRouting,
     escalateAt: policy?.escalateAt,

@@ -7,15 +7,17 @@
  */
 
 import type { NextRequest } from 'next/server';
-import { getFleetSnapshot } from '../../lib/data-source';
+import { ensureHydrated, getFleetSnapshot, getProvenance } from '../../lib/data-source';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  await ensureHydrated();
   const window = request.nextUrl.searchParams.get('window') ?? undefined;
+  const provenance = getProvenance();
 
   return Response.json(
-    { synthetic: true, fleet: getFleetSnapshot(window) },
+    { synthetic: provenance.mode === 'simulated', provenance, fleet: getFleetSnapshot(window) },
     { headers: { 'cache-control': 'no-store' } }
   );
 }

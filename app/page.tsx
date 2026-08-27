@@ -10,10 +10,12 @@
  */
 
 import {
+  ensureHydrated,
   getDashboardData,
   getDelegationSummary,
   getFleetInsights,
   getFleetSparklines,
+  getProvenance,
   PRESET_DURATIONS,
 } from './lib/data-source';
 import { fmtDateTime, fmtNum } from './lib/format';
@@ -43,6 +45,12 @@ interface PageProps {
 
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  await ensureHydrated();
+  // What this page is actually showing, derived from whether real signals
+  // exist. Every "synthetic" claim below reads from here, so the copy cannot
+  // keep saying "demo" once a real fleet starts reporting.
+  const provenance = getProvenance();
+  const isLive = provenance.mode === 'live';
   const data = getDashboardData(params.window, params.agent);
   const fleetInsights = getFleetInsights(params.window);
   const delegationSummary = getDelegationSummary(params.window);
@@ -63,7 +71,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           </a>
           <span className="text-white/20">/</span>
           <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 font-medium text-white/45">
-            Synthetic demo
+            {isLive ? 'Live telemetry' : 'Synthetic demo'}
           </span>
         </div>
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -138,9 +146,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         {/* Synthetic-data notice */}
         <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] px-4 py-2.5">
           <p className="text-xs leading-relaxed text-cyan-200/80">
-            <span className="font-semibold">Synthetic data.</span> This demo renders RAINBOW
-            analytics over a deterministic, seeded fleet simulator — no live agents, no real
-            trust decisions. The dashboard is strictly read-only. Computed{' '}
+            <span className="font-semibold">{isLive ? 'Live data.' : 'Synthetic data.'}</span>{' '}
+            {isLive
+              ? 'This dashboard renders RAINBOW analytics over signals reported by real agents.'
+              : 'This demo renders RAINBOW analytics over a deterministic, seeded fleet simulator — no live agents, no real trust decisions.'}{' '}
+            {provenance.reason} The dashboard is strictly read-only. Computed{' '}
             {fmtDateTime(data.computedAt)} UTC.{' '}
             <FreshnessIndicator computedAt={data.computedAt.toISOString()} />
           </p>
@@ -159,8 +169,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                 into Breaker — the moment continuous risk becomes a binary state change.
               </li>
               <li>
-                Everything here is synthetic and read-only — audit infrastructure and trust telemetry, not live
-                governance.
+                {isLive
+                  ? 'This view is read-only — audit infrastructure and trust telemetry. Rainbow observes; it does not make trust decisions.'
+                  : 'Everything here is synthetic and read-only — audit infrastructure and trust telemetry, not live governance.'}
               </li>
               <li>
                 Next: explore the stack at{' '}
@@ -308,9 +319,20 @@ export default async function DashboardPage({ searchParams }: PageProps) {
         </h2>
         <ul className="mt-2 list-inside list-disc space-y-1 text-[11px] leading-relaxed text-white/40">
           <li>
-            <span className="text-white/55">Synthetic data</span> — a deterministic seeded simulator
-            stands in for live ecosystem signal producers; archetypes (steady, degrading, recovering,
-            dormant, compromised) exercise every panel.
+            {isLive ? (
+              <>
+                <span className="text-white/55">Live data</span> — {provenance.signalCount} signal
+                {provenance.signalCount === 1 ? '' : 's'} ingested via POST /api/signals. Scores are the
+                producer&apos;s declared <code>scoreAfter</code> where sent, otherwise the accumulated
+                deltas rainbow actually received.
+              </>
+            ) : (
+              <>
+                <span className="text-white/55">Synthetic data</span> — a deterministic seeded simulator
+                stands in for live ecosystem signal producers; archetypes (steady, degrading, recovering,
+                dormant, compromised) exercise every panel.
+              </>
+            )}
           </li>
           <li>
             <span className="text-white/55">Grounded vs modeled</span> — cross-agent correlation is

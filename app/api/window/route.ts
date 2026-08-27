@@ -11,18 +11,26 @@
  */
 
 import type { NextRequest } from 'next/server';
-import { getWindowResult, getAgentRiskTrend } from '../../lib/data-source';
+import {
+  ensureHydrated,
+  getAgentRiskTrend,
+  getProvenance,
+  getWindowResult,
+} from '../../lib/data-source';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  await ensureHydrated();
   const params = request.nextUrl.searchParams;
   const window = params.get('window') ?? undefined;
   const agent = params.get('agent') ?? undefined;
+  const provenance = getProvenance();
 
   return Response.json(
     {
-      synthetic: true,
+      synthetic: provenance.mode === 'simulated',
+      provenance,
       window: getWindowResult(window, agent),
       correctedRiskTrend: getAgentRiskTrend(window, agent),
     },

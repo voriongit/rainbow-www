@@ -15,6 +15,7 @@
     "deploy:cf": "npm run build:cf && wrangler deploy"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "@vercel/analytics": "^1.6.1",
     "@vorionsys/basis-spec": "^1.2.0",
     "@vorionsys/rainbow": "^0.3.0",
@@ -23,7 +24,8 @@
     "next": "^16.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
