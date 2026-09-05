@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Embed widgets must not inherit site chrome or the mobile tab bar. */
+body:has(.embed-page) .site-chrome,
+body:has(.embed-page) nav[aria-label='Primary'] {
+  display: none !important;
+}
+
 @layer base {
   /* Keep mobile Safari from auto-inflating text in landscape. */
   html {

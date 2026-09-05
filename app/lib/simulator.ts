@@ -93,6 +93,8 @@ interface PhaseBehavior {
 interface Archetype {
   agentId: string;
   label: string;
+  /** One sentence a visitor can use. Not a metric. */
+  story: string;
   startScore: number;
   cadenceMinutes: number;
   observationTier: ObsTier;
@@ -128,6 +130,7 @@ const ARCHETYPES: Archetype[] = [
   {
     agentId: 'atlas-01',
     label: 'Steady performer',
+    story: 'Almost never fails. The calm baseline the rest of the fleet is measured against.',
     startScore: 815,
     cadenceMinutes: 14,
     observationTier: 'WHITE_BOX',
@@ -142,6 +145,7 @@ const ARCHETYPES: Archetype[] = [
   {
     agentId: 'nova-02',
     label: 'Rising star',
+    story: 'Started near the bottom and is climbing on clean, low-risk work.',
     startScore: 365,
     cadenceMinutes: 12,
     observationTier: 'WHITE_BOX',
@@ -156,6 +160,7 @@ const ARCHETYPES: Archetype[] = [
   {
     agentId: 'cascade-03',
     label: 'Degrading',
+    story: 'Looked healthy, then quality slid. Open this one first — the drop is the point.',
     startScore: 730,
     cadenceMinutes: 13,
     observationTier: 'GRAY_BOX',
@@ -180,6 +185,7 @@ const ARCHETYPES: Archetype[] = [
   {
     agentId: 'flux-04',
     label: 'Erratic oscillator',
+    story: 'Oscillates every few days between solid and shaky — not a one-way slide.',
     startScore: 540,
     cadenceMinutes: 15,
     observationTier: 'GRAY_BOX',
@@ -194,7 +200,8 @@ const ARCHETYPES: Archetype[] = [
   },
   {
     agentId: 'phoenix-05',
-    label: 'CB trip → recovery',
+    label: 'Recovered after a breaker',
+    story: 'Tripped a circuit breaker early in the window, then recovered.',
     startScore: 250,
     cadenceMinutes: 14,
     observationTier: 'BLACK_BOX',
@@ -218,7 +225,8 @@ const ARCHETYPES: Archetype[] = [
   },
   {
     agentId: 'umbra-06',
-    label: 'Dormant stretch',
+    label: 'Went silent',
+    story: 'Went quiet for about eight days, then resumed. Silence is a signal.',
     startScore: 470,
     cadenceMinutes: 25,
     observationTier: 'BLACK_BOX',
@@ -235,7 +243,8 @@ const ARCHETYPES: Archetype[] = [
   //    the window, which RAINBOW should surface as an anomaly cluster. ──
   ...(['orion-07', 'lyra-08', 'vega-09'] as const).map((agentId, i): Archetype => ({
     agentId,
-    label: 'Cluster anomaly (shared CT-SEC / CT-ID failures)',
+    label: 'Shared security failures',
+    story: 'Three agents failing the same identity and security factors at the same time.',
     startScore: 690 + i * 25,
     cadenceMinutes: 17 + i,
     observationTier: 'GRAY_BOX',
@@ -263,7 +272,8 @@ const ARCHETYPES: Archetype[] = [
   })),
   {
     agentId: 'quill-10',
-    label: 'Background mid-tier',
+    label: 'Quiet mid-tier',
+    story: 'Uneventful on purpose — a control so not every agent is a plot.',
     startScore: 575,
     cadenceMinutes: 19,
     observationTier: 'GRAY_BOX',
@@ -277,7 +287,8 @@ const ARCHETYPES: Archetype[] = [
   },
   {
     agentId: 'rune-11',
-    label: 'Background mid-tier',
+    label: 'Quiet mid-tier',
+    story: 'Uneventful on purpose, a step above quill-10.',
     startScore: 615,
     cadenceMinutes: 21,
     observationTier: 'WHITE_BOX',
@@ -292,6 +303,7 @@ const ARCHETYPES: Archetype[] = [
   {
     agentId: 'helix-13',
     label: 'High-volume trusted',
+    story: 'Busy and trusted. What a well-behaved production agent looks like from here.',
     startScore: 880,
     cadenceMinutes: 7,
     observationTier: 'ATTESTED_BOX',
@@ -306,6 +318,7 @@ const ARCHETYPES: Archetype[] = [
   {
     agentId: 'wisp-14',
     label: 'Qualification climb',
+    story: 'Low start, careful work, trying to earn the next tier.',
     startScore: 215,
     cadenceMinutes: 16,
     observationTier: 'BLACK_BOX',
@@ -360,12 +373,17 @@ function pickWeighted<T>(rng: () => number, entries: Array<[T, number]>): T {
 export interface SimAgentInfo {
   agentId: string;
   label: string;
+  /** Present on the demo fleet; omitted for live agents (id is the name). */
+  story?: string;
   observationTier: ObsTier;
   lifecycleState: string;
   score: number;
   tier: string;
   signalCount: number;
 }
+
+/** Demo homepage leads with these — each has a plot, not just a score. */
+export const DEMO_WATCH_IDS = ['cascade-03', 'phoenix-05', 'umbra-06', 'orion-07'] as const;
 
 interface AgentState {
   archetype: Archetype;
@@ -461,6 +479,7 @@ export class FleetSimulator {
     return this.states.map((s) => ({
       agentId: s.archetype.agentId,
       label: s.archetype.label,
+      story: s.archetype.story,
       observationTier: s.archetype.observationTier,
       lifecycleState: this.lifecycleOf(s, this.generatedUpToMs),
       score: s.score,

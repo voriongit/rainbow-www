@@ -17,6 +17,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { getProvenance } from '../lib/data-source';
 
 interface EmbedShellProps {
   children: ReactNode;
@@ -42,7 +43,7 @@ export function EmbedAttribution({ href }: { href?: string }) {
         }}
         aria-hidden="true"
       />
-      <span className="truncate">RAINBOW · synthetic demo · vorion.org</span>
+      <span className="truncate">RAINBOW · vorion.org</span>
     </a>
   );
 }
@@ -56,11 +57,21 @@ export function EmbedAttribution({ href }: { href?: string }) {
  * footnote). Matches the amber honesty idiom used elsewhere on the site.
  */
 export function SyntheticBadge() {
+  const live = getProvenance().mode === 'live';
   return (
     <div className="mb-3 flex items-center">
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/[0.10] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-100/90">
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80" aria-hidden="true" />
-        Synthetic demo
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+          live
+            ? 'border-emerald-400/30 bg-emerald-400/[0.10] text-emerald-100/90'
+            : 'border-amber-400/30 bg-amber-400/[0.10] text-amber-100/90'
+        }`}
+      >
+        <span
+          className={`inline-block h-1.5 w-1.5 rounded-full ${live ? 'bg-emerald-400/80' : 'bg-amber-400/80'}`}
+          aria-hidden="true"
+        />
+        {live ? 'Live telemetry' : 'Demo fleet'}
       </span>
     </div>
   );

@@ -1,11 +1,13 @@
 # @vorionsys/rainbow-www
 
-**RAINBOW Trust Analytics Observatory** — a read-only Next.js dashboard
-rendering [`@vorionsys/rainbow`](https://github.com/voriongit/rainbow)
-analytics over a simulated Trust Signal Bus stream.
+**RAINBOW** is a read-only observatory for agent trust over time. It renders
+[`@vorionsys/rainbow`](https://github.com/voriongit/rainbow) analytics.
 
-Observability, not control: this surface only reads. There are no
-enforcement actions and no mutation paths to trust data.
+Default: a deterministic 13-agent demo fleet, labeled as a demo.
+Live: `POST /api/signals` into Supabase; the UI flips itself when real
+signals are present. Provenance is derived, never hardcoded.
+
+Observability, not control: no enforcement actions, no mutation of trust data.
 
 ## Panels
 
@@ -71,14 +73,16 @@ npm run build       # production build
 
 ## Scope & limitations
 
-- All data is synthetic — a deterministic simulator, not live agents. Absolute
-  timestamps are anchored to each server process start; the relative story is
-  seeded and reproducible.
-- Each serverless instance holds its own in-memory stream; different instances
-  may render slightly different absolute phases. A persistent store (#5)
-  removes this caveat.
-- Delegation health and cross-agent correlation feeds are not wired (no
-  upstream DelegationService / CrossAgentCorrelator in the demo).
+- **Demo fleet** (default) — 13 scripted archetypes. Relative story is seeded
+  and reproducible; absolute timestamps follow process start unless a store is
+  configured.
+- **Live** — requires `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and
+  `RAINBOW_INGEST_TOKEN`. Apply `sql/rainbow-signals.sql` first. Ingest fails
+  closed (503) if any of that is missing.
+- Delegation health on `/lab` is a **modeled policy** over the same signal
+  stream, not native agent-to-agent delegation.
+- Cross-agent correlation on the dashboard is derived from co-occurrence in
+  the stream that is actually loaded (demo or live).
 
 ## License
 

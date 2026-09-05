@@ -10,11 +10,17 @@
  *
  * Print presentation: the screen view stays dark to match the dashboard; the
  * printed/exported output flips to ink-on-white for legibility (see the
- * `print:` utilities below and the `@media print` block in globals.css). Every
- * piece of data here is SYNTHETIC and clearly labelled as such.
+ * `print:` utilities below and the `@media print` block in globals.css).
+ * Provenance (demo vs live) is derived, never hardcoded.
  */
 
-import { getDashboardData, getFleetInsights } from '../lib/data-source';
+import {
+  ensureHydrated,
+  getDashboardData,
+  getFleetInsights,
+  getProvenance,
+} from '../lib/data-source';
+import { ProvenanceBanner, ProvenancePill } from '../components/provenance-banner';
 import { fmtDateTime, fmtNum, fmtSigned } from '../lib/format';
 import { TierSpectrum } from '../components/tier-spectrum';
 import { PrintButton } from '../components/print-button';
@@ -49,8 +55,10 @@ function ReportStat({
 
 export default async function ReportPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  await ensureHydrated();
   const data = getDashboardData(params.window, params.agent);
   const fleetInsights = getFleetInsights(params.window);
+  const provenance = getProvenance();
 
   const fleet = data.fleet.fleet;
   const traj = data.window.trajectory;
@@ -72,9 +80,7 @@ export default async function ReportPage({ searchParams }: PageProps) {
                 VORION
               </span>
               <span className="text-white/20 print:text-black/30">/</span>
-              <span className="rounded-full border border-amber-400/40 bg-amber-400/[0.08] px-2 py-0.5 font-semibold text-amber-200/90 print:border-black/30 print:bg-transparent print:text-black">
-                Synthetic demo report
-              </span>
+              <ProvenancePill provenance={provenance} />
             </div>
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight print:text-black">
               <span
@@ -106,14 +112,10 @@ export default async function ReportPage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        {/* Synthetic / read-only disclaimer — prominent, always printed. */}
-        <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.07] px-4 py-3 print:border-black/40 print:bg-transparent">
-          <p className="text-xs leading-relaxed text-amber-100/90 print:text-black">
-            <span className="font-bold">Synthetic, illustrative report — not live data.</span>{' '}
-            This summary is rendered from a deterministic, seeded fleet simulator. It contains no
-            real agents and no real trust decisions. RAINBOW is read-only audit infrastructure and
-            trust telemetry for observability — it does not govern or control agents. Do not treat
-            any figure here as an operational assessment.
+        <div className="print:border print:border-black/40">
+          <ProvenanceBanner provenance={provenance} computedAt={data.computedAt} />
+          <p className="mt-2 text-xs text-white/45 print:text-black/70">
+            RAINBOW is read-only. Do not treat any figure here as an operational control decision.
           </p>
         </div>
 
