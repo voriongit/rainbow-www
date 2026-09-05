@@ -24,6 +24,7 @@
 import { notFound } from 'next/navigation';
 import { ShieldCheck, CornerDownRight, AlertTriangle } from 'lucide-react';
 import {
+  ensureHydrated,
   getAgents,
   getAgentInfo,
   getAgentSignals,
@@ -254,6 +255,7 @@ function StageLegend({ byStage }: { byStage: Record<ProofStage, number> }) {
 }
 
 export default async function ProofChainPage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
   const order: 'newest' | 'oldest' = sp.order === 'oldest' ? 'oldest' : 'newest';

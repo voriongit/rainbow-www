@@ -11,6 +11,7 @@
 
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
+  ensureHydrated,
   getAgentInfo,
   getDashboardData,
   getAgents,
@@ -411,6 +412,7 @@ function FactorDiff({
 }
 
 export default async function ComparePage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
 

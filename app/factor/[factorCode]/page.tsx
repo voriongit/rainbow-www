@@ -11,7 +11,7 @@
 
 import { notFound } from 'next/navigation';
 import { TRUST_FACTORS } from '@vorionsys/basis-spec';
-import { getFleetSignals, isPresetDuration } from '../../lib/data-source';
+import { ensureHydrated, getFleetSignals, isPresetDuration } from '../../lib/data-source';
 import { getConcept, conceptSlug } from '../../lib/glossary';
 import { tierName } from '../../lib/tiers';
 import { STATUS, tint } from '../../lib/status-colors';
@@ -36,6 +36,7 @@ interface PageProps {
 }
 
 export default async function FactorPage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { factorCode } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

@@ -14,6 +14,7 @@
 import { notFound } from 'next/navigation';
 import type { IngestedSignal } from '@vorionsys/rainbow';
 import {
+  ensureHydrated,
   getFleetSnapshot,
   getAgentSignals,
   isPresetDuration,
@@ -33,6 +34,7 @@ interface PageProps {
 }
 
 export default async function ClusterPage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { clusterId } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

@@ -9,7 +9,7 @@
  * does not control agents. The reference fleets are fixed yardsticks, not live.
  */
 
-import { getDashboardData, isPresetDuration } from '../lib/data-source';
+import { ensureHydrated, getDashboardData, isPresetDuration } from '../lib/data-source';
 import { referenceById, isReferenceId, DEFAULT_REFERENCE_ID } from '../lib/reference-fleets';
 import { Panel } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
@@ -23,6 +23,7 @@ interface PageProps {
 }
 
 export default async function BenchmarkPage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
   const refId = isReferenceId(sp.ref) ? sp.ref : DEFAULT_REFERENCE_ID;

@@ -11,7 +11,7 @@
  */
 
 import type { Metadata } from 'next';
-import { getAgents } from '../lib/data-source';
+import { ensureHydrated, getAgents } from '../lib/data-source';
 import { CopyButton } from './copy-button';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +37,7 @@ interface WidgetDef {
 }
 
 export default async function EmbedConfiguratorPage() {
+  await ensureHydrated();
   // Pick a real agent from the roster so the agent-card preview is live, not a
   // placeholder. Falls back to a stable id if the roster is somehow empty.
   const agents = getAgents();

@@ -10,7 +10,7 @@
 
 import { notFound } from 'next/navigation';
 
-import { getFleetSignals, isPresetDuration } from '../../lib/data-source';
+import { ensureHydrated, getFleetSignals, isPresetDuration } from '../../lib/data-source';
 import { getConcept, conceptSlug } from '../../lib/glossary';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { Panel } from '../../components/panel';
@@ -24,6 +24,7 @@ interface PageProps {
 }
 
 export default async function SignalTypePage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { type: typeRaw } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

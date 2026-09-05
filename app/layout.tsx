@@ -6,7 +6,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { Inter } from 'next/font/google';
 import { TRUST_FACTORS } from '@vorionsys/basis-spec';
 import './globals.css';
-import { getAgents } from './lib/data-source';
+import { ensureHydrated, getAgents } from './lib/data-source';
 import { CONCEPTS } from './lib/glossary';
 import { TIER_ORDER, tierName } from './lib/tiers';
 import { CommandPalette, type CommandItem } from './components/command-palette';
@@ -99,11 +99,12 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await ensureHydrated();
   return (
     <html lang="en" className={inter.className}>
       {/* Bottom padding clears the fixed mobile nav (mobile only); desktop unaffected. */}

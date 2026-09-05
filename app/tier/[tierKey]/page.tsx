@@ -11,7 +11,7 @@
 import { notFound } from 'next/navigation';
 import { TRUST_TIERS, TRUST_FACTORS } from '@vorionsys/basis-spec';
 
-import { getTierMembers, isPresetDuration } from '../../lib/data-source';
+import { ensureHydrated, getTierMembers, isPresetDuration } from '../../lib/data-source';
 import { TIER_COLORS, TIER_ORDER, tierName, type TierKey } from '../../lib/tiers';
 import { LIFECYCLE_COLORS, tint } from '../../lib/status-colors';
 import { conceptSlug } from '../../lib/glossary';
@@ -28,6 +28,7 @@ interface PageProps {
 }
 
 export default async function TierPage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { tierKey } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

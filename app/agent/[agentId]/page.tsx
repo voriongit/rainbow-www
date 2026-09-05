@@ -12,6 +12,7 @@
 import { notFound } from 'next/navigation';
 import { TrendingUp, TrendingDown, Minus, Check, X } from 'lucide-react';
 import {
+  ensureHydrated,
   getAgentInfo,
   getDashboardData,
   getAgentSignals,
@@ -70,6 +71,7 @@ function MiniStat({
 }
 
 export default async function AgentProfilePage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { agentId } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
