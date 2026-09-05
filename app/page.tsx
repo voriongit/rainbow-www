@@ -16,9 +16,10 @@ import {
   getFleetInsights,
   getFleetSparklines,
   getProvenance,
+  getWatchAgents,
   PRESET_DURATIONS,
 } from './lib/data-source';
-import { fmtDateTime, fmtNum } from './lib/format';
+import { fmtNum } from './lib/format';
 import { WindowSelector } from './components/window-selector';
 import { AgentSelector } from './components/agent-selector';
 import { Stat } from './components/stat';
@@ -34,7 +35,8 @@ import { DelegationTeaserPanel } from './components/panels/delegation-teaser-pan
 import { InfoLink } from './components/info-link';
 import { ExploreLink, exploreHref } from './components/explore-link';
 import { CopyLink } from './components/copy-link';
-import { FreshnessIndicator } from './components/freshness-indicator';
+import { ProvenanceBanner, ProvenancePill } from './components/provenance-banner';
+import { WatchList } from './components/watch-list';
 import { TierSpectrum } from './components/tier-spectrum';
 
 export const dynamic = 'force-dynamic';
@@ -54,6 +56,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const data = getDashboardData(params.window, params.agent);
   const fleetInsights = getFleetInsights(params.window);
   const delegationSummary = getDelegationSummary(params.window);
+  const watchAgents = getWatchAgents();
   const sparklines: Record<string, { t: number; v: number }[]> = {};
   for (const s of getFleetSparklines(params.window)) sparklines[s.agentId] = s.points;
 
@@ -61,21 +64,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     <main className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       {/* Header */}
       <header className="flex flex-col gap-4">
-        {/* Brand row */}
-        <div className="flex items-center gap-2 text-[11px]">
-          <a
-            href="https://vorion.org"
-            className="font-semibold tracking-wider text-white/55 transition-colors hover:text-white/85"
-          >
-            VORION ↗
-          </a>
-          <span className="text-white/20">/</span>
-          <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 font-medium text-white/45">
-            {isLive ? 'Live telemetry' : 'Synthetic demo'}
-          </span>
-        </div>
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
+          <div className="max-w-2xl">
+            <div className="mb-2 flex items-center gap-2 text-[11px]">
+              <ProvenancePill provenance={provenance} />
+            </div>
             <h1 className="text-2xl font-extrabold tracking-tight">
               <span
                 className="bg-clip-text text-transparent"
@@ -86,11 +79,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               >
                 RAINBOW
               </span>{' '}
-              <span className="text-white/85">Trust Analytics Observatory</span>
+              <span className="text-white/85">observatory</span>
             </h1>
-            <p className="mt-1 text-sm text-white/45">
-              Recorded Analytics Involving Non-Binary Orchestration Window — read-only
-              observability over the Trust Signal Bus.
+            <p className="mt-2 text-sm leading-relaxed text-white/60">
+              Watch how a fleet of AI agents earns or loses trust over time. Trust is a score
+              0–1000 across eight tiers (T0→T7). This surface is read-only — it does not gate
+              or govern anyone.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -109,84 +103,35 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               agentId={data.agentId}
             />
             <ExploreLink
-              href="/concepts"
-              className="text-xs text-white/45"
-              title="Browse the concept glossary"
-            >
-              Concepts ↗
-            </ExploreLink>
-            <ExploreLink
-              href="/compare"
-              className="text-xs text-white/45"
-              title="Compare two agents side by side"
-            >
-              Compare ↗
-            </ExploreLink>
-            <ExploreLink
-              href="/lab"
-              className="text-xs text-white/45"
-              title="Delegation health — derived under a modeled orchestration policy"
-            >
-              Lab ↗
-            </ExploreLink>
-            <ExploreLink
               href={exploreHref('/report', { window: data.duration, agent: data.agentId })}
               className="text-xs text-white/45"
-              title="Print-optimized, shareable synthetic report of this view"
+              title="Print-optimized snapshot of this view"
             >
               Report ↗
             </ExploreLink>
             <CopyLink />
-            <span className="text-[11px] text-white/30" title="Press ⌘K (or Ctrl-K) to search">
-              ⌘K
-            </span>
           </div>
         </div>
 
-        {/* Synthetic-data notice */}
-        <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] px-4 py-2.5">
-          <p className="text-xs leading-relaxed text-cyan-200/80">
-            <span className="font-semibold">{isLive ? 'Live data.' : 'Synthetic data.'}</span>{' '}
-            {isLive
-              ? 'This dashboard renders RAINBOW analytics over signals reported by real agents.'
-              : 'This demo renders RAINBOW analytics over a deterministic, seeded fleet simulator — no live agents, no real trust decisions.'}{' '}
-            {provenance.reason} The dashboard is strictly read-only. Computed{' '}
-            {fmtDateTime(data.computedAt)} UTC.{' '}
-            <FreshnessIndicator computedAt={data.computedAt.toISOString()} />
-          </p>
-          <details className="mt-2 text-xs text-cyan-200/70">
-            <summary className="cursor-pointer select-none font-medium text-cyan-200/90 [touch-action:manipulation]">
-              How to read this demo
-            </summary>
-            <ul className="mt-2 list-inside list-disc space-y-1 leading-relaxed text-cyan-100/55">
-              <li>
-                <span className="font-medium text-cyan-100/80">Trust spectrum:</span> every agent sits in a
-                tier T0→T7 (red→violet). Tap a band to explore that tier.
-              </li>
-              <li>
-                <span className="font-medium text-cyan-100/80">Risk accumulator:</span> rolling pressure over
-                the window; the <span className="font-medium text-cyan-100/80">Elbow</span> marks where it bends
-                into Breaker — the moment continuous risk becomes a binary state change.
-              </li>
-              <li>
-                {isLive
-                  ? 'This view is read-only — audit infrastructure and trust telemetry. Rainbow observes; it does not make trust decisions.'
-                  : 'Everything here is synthetic and read-only — audit infrastructure and trust telemetry, not live governance.'}
-              </li>
-              <li>
-                Next: explore the stack at{' '}
-                <a href="https://vorion.org" className="underline hover:text-cyan-100">
-                  vorion.org
-                </a>
-                , or watch agents get audited &amp; gated at{' '}
-                <a href="https://demo.vorion.org" className="underline hover:text-cyan-100">
-                  demo.vorion.org
-                </a>
-                .
-              </li>
-            </ul>
-          </details>
-        </div>
+        <ProvenanceBanner provenance={provenance} computedAt={data.computedAt} />
+        <details className="text-xs text-white/50">
+          <summary className="cursor-pointer select-none font-medium text-white/70 [touch-action:manipulation]">
+            How to read this
+          </summary>
+          <ul className="mt-2 list-inside list-disc space-y-1 leading-relaxed text-white/45">
+            <li>
+              <span className="font-medium text-white/70">Spectrum:</span> every agent sits in a
+              tier T0→T7. Tap a band to see who is in it.
+            </li>
+            <li>
+              <span className="font-medium text-white/70">Elbow:</span> on the risk chart, the
+              moment continuous pressure becomes a breaker trip.
+            </li>
+            <li>
+              Lab, network, and control pages are models — they do not steer live agents.
+            </li>
+          </ul>
+        </details>
 
         {/* Spectrum accent hairline */}
         <div
@@ -198,6 +143,13 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           aria-hidden="true"
         />
       </header>
+
+      <WatchList
+        agents={watchAgents}
+        sparklines={sparklines}
+        duration={data.duration}
+        live={isLive}
+      />
 
       {/* Rainbow trust tier spectrum — the hero visual */}
       <TierSpectrum

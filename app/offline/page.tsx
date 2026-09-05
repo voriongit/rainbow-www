@@ -17,8 +17,8 @@ export default function OfflinePage() {
     <main className="mx-auto flex min-h-[70vh] max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
       <div className="text-3xl font-semibold tracking-tight">You&apos;re offline</div>
       <p className="text-sm leading-relaxed text-white/55">
-        RAINBOW shows live trust telemetry, so this view needs a connection. Any pages you&apos;ve
-        already opened are still available from the cache.
+        This observatory needs a network connection to compute a view. Pages you have already
+        opened may still be available from the cache.
       </p>
       <Link
         href="/"

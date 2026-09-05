@@ -33,7 +33,7 @@ import {
   type EscalationEvent,
   type DelegationHealthSummary,
 } from '@vorionsys/rainbow';
-import { FleetSimulator, type SimAgentInfo } from './simulator';
+import { DEMO_WATCH_IDS, FleetSimulator, type SimAgentInfo } from './simulator';
 import {
   LiveFleetSource,
   SimulatedFleetSource,
@@ -328,6 +328,20 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
 /** Roster of simulated agents (read-only) */
 export function getAgents(): SimAgentInfo[] {
   return getReadySource().source.agents();
+}
+
+/**
+ * Four agents the homepage should lead with.
+ * Demo: the scripted plots. Live: the lowest current scores (need attention).
+ */
+export function getWatchAgents(): SimAgentInfo[] {
+  const agents = getAgents();
+  if (getProvenance().mode === 'simulated') {
+    return DEMO_WATCH_IDS.map((id) => agents.find((a) => a.agentId === id)).filter(
+      (a): a is SimAgentInfo => Boolean(a),
+    );
+  }
+  return [...agents].sort((a, b) => a.score - b.score).slice(0, 4);
 }
 
 /** Windowed analytics for one agent (or fleet-wide when agentId omitted) */
