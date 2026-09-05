@@ -37,7 +37,7 @@ enforcement actions and no mutation paths to trust data.
 
 | Route | Returns |
 | --- | --- |
-| `GET /api/agents` | simulated fleet roster |
+| `GET /api/agents` | fleet roster (`synthetic` derived from provenance) |
 | `GET /api/window?window=24h&agent=cascade-03` | windowed analytics + corrected risk trend |
 | `GET /api/fleet?window=24h` | fleet orchestration snapshot |
 
@@ -46,10 +46,11 @@ enforcement actions and no mutation paths to trust data.
 - **#3 rainbow-decontaminate** — done: the decontamination landed in
   `@vorionsys/rainbow` (0.2.x/0.3.0); the dashboard consumes the library's canonical
   `computeRiskTrend` from npm and keeps only a thin seeding/windowing adapter.
-- **#5 persistent store** — construct `Rainbow` with a Supabase-backed
-  `WindowStore` in `app/lib/data-source.ts`; the accessors only depend on the
-  facade surface. Keys stay in env (`SUPABASE_URL`, anon key + RLS); the
-  service-role key must never reach the client.
+- **#5 persistent store** — done: `SupabaseWindowStore` + `POST /api/signals`.
+  Hydrate loads the mirror; live mode **replays** those rows into a fresh
+  Rainbow so the collector (risk, signal log, correlations) sees the same
+  signals as window analytics. Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+  (server-only), `RAINBOW_INGEST_TOKEN`. Apply `sql/rainbow-signals.sql` first.
 - **#6 producers/simulator** — replace `app/lib/simulator.ts` with the shared
   ecosystem simulator, keeping the `FleetSimulator` surface
   (`ensureUpTo`, `agents`, `resolveScoreAt`).
@@ -71,14 +72,12 @@ npm run build       # production build
 
 ## Scope & limitations
 
-- All data is synthetic — a deterministic simulator, not live agents. Absolute
-  timestamps are anchored to each server process start; the relative story is
-  seeded and reproducible.
-- Each serverless instance holds its own in-memory stream; different instances
-  may render slightly different absolute phases. A persistent store (#5)
-  removes this caveat.
-- Delegation health and cross-agent correlation feeds are not wired (no
-  upstream DelegationService / CrossAgentCorrelator in the demo).
+- **Demo fleet** (default) — 13 scripted archetypes; relative story is seeded.
+- **Live** — store configured and non-empty. Reads fail open to the demo if
+  hydrate fails; ingest fails closed (503) without token+store.
+- Delegation on `/lab` is a modeled policy over the loaded stream, not native
+  A2A delegation. Dashboard correlations are derived from co-occurrence in
+  that same stream (demo or live).
 
 ## License
 

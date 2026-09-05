@@ -14,7 +14,7 @@
  * piece of data here is SYNTHETIC and clearly labelled as such.
  */
 
-import { getDashboardData, getFleetInsights } from '../lib/data-source';
+import { ensureHydrated, getDashboardData, getFleetInsights } from '../lib/data-source';
 import { fmtDateTime, fmtNum, fmtSigned } from '../lib/format';
 import { TierSpectrum } from '../components/tier-spectrum';
 import { PrintButton } from '../components/print-button';
@@ -48,6 +48,7 @@ function ReportStat({
 }
 
 export default async function ReportPage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const params = await searchParams;
   const data = getDashboardData(params.window, params.agent);
   const fleetInsights = getFleetInsights(params.window);

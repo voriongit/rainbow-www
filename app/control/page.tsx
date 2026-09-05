@@ -16,7 +16,7 @@
  */
 
 import type { Metadata } from 'next';
-import { getAgents } from '../lib/data-source';
+import { ensureHydrated, getAgents } from '../lib/data-source';
 import { Panel, EmptyState } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
 import { TIER_COLORS, tierName, type TierKey } from '../lib/tiers';
@@ -33,6 +33,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ControlIndexPage() {
+  await ensureHydrated();
   const agents = getAgents();
   const sorted = agents
     .slice()

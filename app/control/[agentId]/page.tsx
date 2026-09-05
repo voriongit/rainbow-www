@@ -20,7 +20,7 @@
  */
 
 import { notFound } from 'next/navigation';
-import { getAgentInfo } from '../../lib/data-source';
+import { ensureHydrated, getAgentInfo } from '../../lib/data-source';
 import { Panel } from '../../components/panel';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { ControlModeSelector } from '../../components/control/control-mode-selector';
@@ -82,6 +82,7 @@ function clampMode(raw: string | undefined): OperationModeKey {
 }
 
 export default async function ControlCardPage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { agentId } = await params;
   const sp = await searchParams;
 

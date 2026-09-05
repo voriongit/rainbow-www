@@ -9,10 +9,12 @@
  * simulated stream to "now", then reads through the Rainbow facade.
  * No accessor mutates trust data on behalf of a request.
  *
- * SEAM (#5 persistent store): to back this with Supabase instead of the
- * simulator, construct `Rainbow` with a persistent `WindowStore`
- * implementation and drop the simulator wiring — the accessors below only
- * depend on the facade surface.
+ * SEAM (#5 persistent store): a configured Supabase store that actually
+ * holds signals flips the read path to live. Signals are replayed into a
+ * fresh Rainbow (collector + in-memory store) so risk/log/correlation
+ * queries — which read the collector — see the same rows as window
+ * analytics. The persistent store is NOT passed into Rainbow: ingest always
+ * store.puts, and sharing the instance would duplicate rows on replay.
  */
 
 import 'server-only';
@@ -47,6 +49,7 @@ import {
 } from './corrected-risk-trend';
 import { CrossAgentCorrelator } from './cross-agent-correlator';
 import { DelegationService, type DelegationPolicy } from './delegation-service';
+import { replayStoreIntoRainbow } from './replay';
 
 /** Demo seed — fixed so every cold start tells the same relative story */
 const SEED = 20260606;
@@ -121,10 +124,20 @@ export function invalidateSource(): void {
 export function ensureHydrated(): Promise<number> {
   const store = getStore();
   if (!store) return Promise.resolve(0);
-  globalCache.__rainbowHydration ??= store.hydrate().catch((err) => {
-    console.error('[rainbow] hydrate failed - falling back to the simulator:', err);
-    return 0;
-  });
+  if (!globalCache.__rainbowHydration) {
+    globalCache.__rainbowHydration = store
+      .hydrate()
+      .then((n) => {
+        // Drop any source built against an empty mirror before hydrate finished.
+        invalidateSource();
+        return n;
+      })
+      .catch((err) => {
+        console.error('[rainbow] hydrate failed - falling back to the simulator:', err);
+        globalCache.__rainbowHydration = undefined;
+        return 0;
+      });
+  }
   return globalCache.__rainbowHydration;
 }
 
@@ -168,6 +181,7 @@ function computeProvenance(): Provenance {
  *
  * Memoized per render: it is read by the page, by every API route, and by
  * getSource() itself, and recomputing it each time would re-walk the store.
+ * Callers must await ensureHydrated() first so a configured store is loaded.
  */
 export const getProvenance = cache(computeProvenance);
 
@@ -179,10 +193,12 @@ function getSource(): ReadSource {
   if (provenance.mode === 'live') {
     const store = getStore()!;
     const live = new LiveFleetSource(store);
+    // Fresh Rainbow (its own MemoryWindowStore). Passing `store` here and then
+    // ingesting would store.put each row again and enqueue a duplicate flush.
     const rainbow = new Rainbow({
-      store,
       resolveInitialScore: (agentId, at) => live.resolveScoreAt(agentId, at),
     });
+    replayStoreIntoRainbow(store, rainbow);
     globalCache.__rainbowSource = { source: live, rainbow };
     return globalCache.__rainbowSource;
   }
@@ -358,8 +374,14 @@ export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
   const { source: fleetSource, rainbow } = getReadySource();
   const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
+  const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
+  const signals = rainbow.collector.queryAll(from, now);
   return rainbow.getOrchestrationSnapshot(
-    { agentScores: fleetSource.currentScores(), correlationAlerts: [], escalationEvents: [] },
+    {
+      agentScores: fleetSource.currentScores(),
+      correlationAlerts: deriveCorrelationAlerts(signals),
+      escalationEvents: [],
+    },
     { duration },
     now
   );

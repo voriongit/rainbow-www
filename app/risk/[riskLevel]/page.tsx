@@ -11,7 +11,7 @@
 import { notFound } from 'next/navigation';
 import { RISK_LEVELS } from '@vorionsys/basis-spec';
 
-import { getFleetSignals, isPresetDuration } from '../../lib/data-source';
+import { ensureHydrated, getFleetSignals, isPresetDuration } from '../../lib/data-source';
 import { conceptSlug } from '../../lib/glossary';
 import { STATUS, tint } from '../../lib/status-colors';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
@@ -26,6 +26,7 @@ interface PageProps {
 }
 
 export default async function RiskLevelPage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { riskLevel } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

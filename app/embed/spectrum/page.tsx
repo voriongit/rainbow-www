@@ -8,7 +8,7 @@
  * Read-only over the deterministic simulator; supports `?window=`. RSC only.
  */
 
-import { getFleetSnapshot, isPresetDuration } from '../../lib/data-source';
+import { ensureHydrated, getFleetSnapshot, isPresetDuration } from '../../lib/data-source';
 import { TIER_COLORS, TIER_ORDER, tierName } from '../../lib/tiers';
 import { fmtNum } from '../../lib/format';
 import { EmbedShell } from '../embed-shell';
@@ -20,6 +20,7 @@ interface PageProps {
 }
 
 export default async function EmbedSpectrumPage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
 

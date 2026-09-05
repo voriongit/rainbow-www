@@ -11,7 +11,7 @@
  * off the assumption-free main dashboard on purpose.
  */
 
-import { getDelegationModel, isPresetDuration } from '../lib/data-source';
+import { ensureHydrated, getDelegationModel, isPresetDuration } from '../lib/data-source';
 import {
   clampHandlerCount,
   DEFAULT_HANDLER_COUNT,
@@ -52,6 +52,7 @@ function fmtResolution(ms: number): string {
 }
 
 export default async function LabPage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
 

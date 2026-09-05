@@ -11,6 +11,7 @@
 import { notFound } from 'next/navigation';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
+  ensureHydrated,
   getAgentInfo,
   getDashboardData,
   isPresetDuration,
@@ -38,6 +39,7 @@ function tint(hex: string): string {
 }
 
 export default async function EmbedAgentPage({ params, searchParams }: PageProps) {
+  await ensureHydrated();
   const { agentId } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

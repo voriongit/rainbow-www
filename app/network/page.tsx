@@ -25,6 +25,7 @@
 
 import type { Metadata } from 'next';
 import {
+  ensureHydrated,
   getDelegationModel,
   isPresetDuration,
   PRESET_DURATIONS,
@@ -59,6 +60,7 @@ function fmtResolution(ms: number): string {
 }
 
 export default async function NetworkPage({ searchParams }: PageProps) {
+  await ensureHydrated();
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
 
