@@ -1,6 +1,17 @@
 {
   // Cloudflare Workers config for the OpenNext build of rainbow-www.
   // Generated assets live in .open-next/ (git-ignored); produced by `npm run build:cf`.
+  //
+  //   npm run deploy:cf    build, then publish to rainbow.vorion.org
+  //
+  // The vorion.org zone lives in the same Cloudflare account as this Worker, so the
+  // custom domain below attaches on deploy. Delete any existing DNS record for
+  // `rainbow` (the old Vercel CNAME) first, or the deploy fails with error 100117.
+  //
+  // Optional secrets (`npx wrangler secret put NAME`). With none set the dashboard
+  // runs its seeded simulator and labels itself "Synthetic demo" (see .env.example):
+  //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   persistent signal store
+  //   RAINBOW_INGEST_TOKEN                      bearer token for POST /api/signals
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rainbow-www",
   "main": ".open-next/worker.js",
@@ -9,5 +20,11 @@
   "assets": {
     "binding": "ASSETS",
     "directory": ".open-next/assets"
+  },
+  "routes": [
+    { "pattern": "rainbow.vorion.org", "custom_domain": true }
+  ],
+  "observability": {
+    "enabled": true
   }
 }
