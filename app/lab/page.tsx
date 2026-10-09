@@ -28,6 +28,8 @@ import { LabPolicyControls } from '../components/lab-policy-controls';
 import { BASELINE_PRESET, presetIdFor, presetLabel } from '../lib/lab-presets';
 import { fmtNum, fmtSigned, fmtDateTime } from '../lib/format';
 import { STATUS } from '../lib/status-colors';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +51,17 @@ function fmtResolution(ms: number): string {
   if (ms <= 0) return '—';
   const m = ms / 60_000;
   return m >= 1 ? `${m.toFixed(1)}m` : `${Math.round(ms / 1000)}s`;
+}
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `Delegation lab · ${window}`,
+    description: `Modeled delegation health over the last ${window}: a declared routing policy applied to real trust trajectories. Modeled, not grounded.`,
+    path: '/lab',
+    query: { window, handlers: sp.handlers, lead: sp.lead, esc: sp.esc },
+  });
 }
 
 export default async function LabPage({ searchParams }: PageProps) {

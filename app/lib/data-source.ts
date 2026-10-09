@@ -50,6 +50,14 @@ import {
 import { CrossAgentCorrelator } from './cross-agent-correlator';
 import { DelegationService, type DelegationPolicy } from './delegation-service';
 import { replayStoreIntoRainbow } from './replay';
+import {
+  deriveAgentInsights,
+  deriveFleetInsights,
+  peakContributors,
+  sortInsights,
+  type ContributingSignal,
+  type FleetAgentInput,
+} from './insights';
 
 /** Demo seed — fixed so every cold start tells the same relative story */
 const SEED = 20260606;
@@ -261,13 +269,15 @@ export interface DashboardData {
   agents: SimAgentInfo[];
   /** Windowed analytics for the selected agent */
   window: AnalyticsWindowResult;
+  /** Selected agent's score at the window's left edge */
+  startScore: number;
   /** Corrected accumulator (P(T) × R) for the selected agent */
   correctedRisk: RiskTrend;
   /** Fleet-wide orchestration snapshot */
   fleet: OrchestrationSnapshot;
   /** Non-binary state snapshot (16-factor health) for the selected agent */
   state: NonBinaryStateSnapshot;
-  /** Rule-based insights derived from the selected agent's window */
+  /** Rule-based insights bound to the selected agent's displayed series */
   insights: RecordedInsight[];
   /** Total signals across the fleet within the window */
   fleetSignalCount: number;
@@ -291,7 +301,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   // edge of the chart reflects true accumulated pressure, not a cold start
   const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
   const riskSignals = rainbow.collector.query(agentId, seedFrom, now);
-  const correctedRisk = computeCorrectedRiskTrend(riskSignals, from.getTime());
+  const correctedRisk = computeAgentRisk(duration, agentId);
 
   // Cross-agent correlations are HONESTLY DERIVED from real co-occurrence in
   // the (synthetic) signal stream — shared failing factors and shared
@@ -300,15 +310,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   // lives only on the /lab route, which derives it under a declared
   // orchestration policy (one model the assumption-free main dashboard avoids).
   const fleetWindowSignals = rainbow.collector.queryAll(from, now);
-  const fleet = rainbow.getOrchestrationSnapshot(
-    {
-      agentScores: fleetSource.currentScores(),
-      correlationAlerts: deriveCorrelationAlerts(fleetWindowSignals),
-      escalationEvents: [],
-    },
-    { duration },
-    now
-  );
+  const fleet = computeFleetSnapshot(duration);
 
   const state = rainbow.getStateSnapshot(
     agentId,
@@ -323,8 +325,19 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
 
   const fleetSignalCount = fleetWindowSignals.length;
 
-  // Rule-based insights derived from the selected agent's window analytics.
-  const insights = rainbow.getInsights(window, now);
+  // Rule-based insights bound to the series this view draws: the agent's
+  // trajectory and the SAME seeded accumulator the risk panel renders.
+  const startScore = fleetSource.resolveScoreAt(agentId, from);
+  const insights = sortInsights(
+    deriveAgentInsights({
+      agentId,
+      window,
+      startScore,
+      risk: correctedRisk,
+      riskSignals,
+      now,
+    })
+  );
 
   return {
     computedAt: now,
@@ -333,6 +346,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
     agentInfo,
     agents,
     window,
+    startScore,
     correctedRisk,
     fleet,
     state,
@@ -369,11 +383,10 @@ export function getAgentRiskTrend(durationRaw?: string, agentId?: string): RiskT
   return computeCorrectedRiskTrend(signals, from.getTime());
 }
 
-/** Fleet-wide orchestration snapshot */
-export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
+/** Fleet snapshot per duration — memoized within a request. */
+const computeFleetSnapshot = cache((duration: PresetDuration): OrchestrationSnapshot => {
   const { source: fleetSource, rainbow } = getReadySource();
   const now = getNow();
-  const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
   const signals = rainbow.collector.queryAll(from, now);
   return rainbow.getOrchestrationSnapshot(
@@ -385,6 +398,11 @@ export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
     { duration },
     now
   );
+});
+
+/** Fleet-wide orchestration snapshot */
+export function getFleetSnapshot(durationRaw?: string): OrchestrationSnapshot {
+  return computeFleetSnapshot(isPresetDuration(durationRaw) ? durationRaw : '24h');
 }
 
 /**
@@ -478,13 +496,155 @@ export function getFleetSparklines(durationRaw?: string): AgentSparkline[] {
   });
 }
 
-/** Rule-based insights derived from the FLEET-WIDE window (all agents). */
-export function getFleetInsights(durationRaw?: string): RecordedInsight[] {
+/** Seeded (window-correct) accumulator for one agent — memoized per request. */
+const computeAgentRisk = cache((duration: PresetDuration, agentId: string): RiskTrend => {
   const { rainbow } = getReadySource();
+  const now = getNow();
+  const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
+  const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
+  return computeCorrectedRiskTrend(rainbow.collector.query(agentId, seedFrom, now), from.getTime());
+});
+
+/**
+ * The accumulator peak and the failures that make it up, for the proof page:
+ * the same seeded series the risk panel and the agent insight cite.
+ */
+export function getAgentRiskEvidence(
+  durationRaw: string | undefined,
+  agentId: string,
+  limit = 12
+): { risk: RiskTrend; peakAt?: Date; contributors: ContributingSignal[]; contributorCount: number } {
+  const { rainbow } = getReadySource();
+  const now = getNow();
   const duration: PresetDuration = isPresetDuration(durationRaw) ? durationRaw : '24h';
-  const fleetWindow = computeWindow(duration, undefined);
-  return rainbow.getInsights(fleetWindow, getNow());
+  const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
+  const seedFrom = new Date(from.getTime() - RISK_SEED_WINDOW_MS);
+  const risk = computeAgentRisk(duration, agentId);
+  const evidence = peakContributors(risk, rainbow.collector.query(agentId, seedFrom, now), limit);
+  return { risk, peakAt: evidence.peakAt, contributors: evidence.signals, contributorCount: evidence.total };
 }
+
+/** One agent's line in the fleet overview. */
+export interface FleetAgentRow {
+  agentId: string;
+  label: string;
+  tier: string;
+  /** Score at the window's left edge. */
+  start: number;
+  current: number;
+  velocity: number;
+  trend: AnalyticsWindowResult['trajectory']['trend'];
+  risk: Omit<RiskTrend, 'samples'>;
+}
+
+export interface FleetOverview {
+  computedAt: Date;
+  duration: PresetDuration;
+  agentCount: number;
+  /** Fleet mean / median over time, sampled on a fixed grid. */
+  meanSeries: { t: number; v: number }[];
+  medianSeries: { t: number; v: number }[];
+  mean: { start: number; end: number };
+  median: { start: number; end: number };
+  rows: FleetAgentRow[];
+  /** Pooled signal counts — a legitimate fleet statistic (counts add up). */
+  distribution: AnalyticsWindowResult['distribution'];
+  insights: RecordedInsight[];
+}
+
+const FLEET_SERIES_POINTS = 48;
+
+function mean(xs: number[]): number {
+  return xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length;
+}
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const sorted = xs.slice().sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Fleet-scope view: fleet statistics computed from every agent's own series
+ * (not from a pooled window, whose "trajectory" sums all agents' deltas onto
+ * one starting score and is meaningless). Memoized per request.
+ */
+const computeFleetOverview = cache((duration: PresetDuration): FleetOverview => {
+  const { source: fleetSource } = getReadySource();
+  const now = getNow();
+  const fromMs = now.getTime() - WINDOW_DURATION_MS[duration];
+  const from = new Date(fromMs);
+  const agents = fleetSource.agents();
+  const ids = agents.map((a) => a.agentId);
+
+  const meanSeries: FleetOverview['meanSeries'] = [];
+  const medianSeries: FleetOverview['medianSeries'] = [];
+  const step = (now.getTime() - fromMs) / (FLEET_SERIES_POINTS - 1);
+  for (let i = 0; i < FLEET_SERIES_POINTS; i++) {
+    const t = i === FLEET_SERIES_POINTS - 1 ? now.getTime() : fromMs + i * step;
+    const scores = ids.map((id) => fleetSource.resolveScoreAt(id, new Date(t)));
+    meanSeries.push({ t, v: mean(scores) });
+    medianSeries.push({ t, v: median(scores) });
+  }
+
+  const inputs: FleetAgentInput[] = agents.map((a) => ({
+    agentId: a.agentId,
+    window: computeWindow(duration, a.agentId),
+    startScore: fleetSource.resolveScoreAt(a.agentId, from),
+    risk: computeAgentRisk(duration, a.agentId),
+  }));
+
+  const startScores = inputs.map((i) => i.startScore);
+  const endScores = agents.map((a) => a.score);
+  const meanStats = { start: mean(startScores), end: mean(endScores) };
+  const medianStats = { start: median(startScores), end: median(endScores) };
+
+  const snapshot = computeFleetSnapshot(duration);
+  const fleetWindow = computeWindow(duration, undefined);
+
+  const rows: FleetAgentRow[] = inputs.map((i, idx) => {
+    const { samples: _samples, ...risk } = i.risk;
+    return {
+      agentId: i.agentId,
+      label: agents[idx].label,
+      tier: agents[idx].tier,
+      start: i.startScore,
+      current: i.window.trajectory.current,
+      velocity: i.window.trajectory.velocity,
+      trend: i.window.trajectory.trend,
+      risk,
+    };
+  });
+
+  return {
+    computedAt: now,
+    duration,
+    agentCount: agents.length,
+    meanSeries,
+    medianSeries,
+    mean: meanStats,
+    median: medianStats,
+    rows,
+    distribution: fleetWindow.distribution,
+    insights: sortInsights(
+      deriveFleetInsights({
+        agents: inputs,
+        fleetWindow,
+        fleetMean: meanStats,
+        fleetMedian: medianStats.end,
+        anomalyClusters: snapshot.anomalyClusters,
+        now,
+      })
+    ),
+  };
+});
+
+/** Fleet-scope overview (fleet trend, per-agent accumulators, fleet insights). */
+export function getFleetOverview(durationRaw?: string): FleetOverview {
+  return computeFleetOverview(isPresetDuration(durationRaw) ? durationRaw : '24h');
+}
+
 
 const correlator = new CrossAgentCorrelator();
 

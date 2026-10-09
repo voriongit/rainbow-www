@@ -25,6 +25,8 @@ import { ExploreLink, exploreHref } from '../components/explore-link';
 import { Panel } from '../components/panel';
 import { LineChart } from '../components/charts/line-chart';
 import { ComparePicker } from './compare-picker';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,9 +125,9 @@ function CompareColumn({
           </MiniStat>
           <MiniStat label="Risk cur/peak">
             <p className="text-sm font-semibold text-white/85">
-              {fmtNum(risk.currentAccumulatorValue, 1)}
+              {fmtNum(risk.currentAccumulatorValue)}
               <span className="text-white/40"> / </span>
-              {fmtNum(risk.peakInWindow, 1)}
+              {fmtNum(risk.peakInWindow)}
             </p>
           </MiniStat>
         </div>
@@ -409,6 +411,19 @@ function FactorDiff({
       </ul>
     </Panel>
   );
+}
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  const a = sp.a ?? DEFAULT_A;
+  const b = sp.b ?? DEFAULT_B;
+  return pageMetadata({
+    title: `Compare ${a} vs ${b} · ${window}`,
+    description: `${a} and ${b} side by side over the last ${window}: trajectories, risk accumulators and the factor gap.`,
+    path: '/compare',
+    query: { a, b, window },
+  });
 }
 
 export default async function ComparePage({ searchParams }: PageProps) {

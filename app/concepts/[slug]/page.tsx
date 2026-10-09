@@ -19,7 +19,11 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params;
   const c = getConcept(slug);
-  return { title: c ? `${c.term} — RAINBOW` : 'Concept — RAINBOW' };
+  return {
+    title: c ? c.term : 'Concept',
+    description: c?.short,
+    alternates: { canonical: `/concepts/${slug}` },
+  };
 }
 
 export default async function ConceptPage({ params }: PageProps) {
@@ -57,7 +61,7 @@ export default async function ConceptPage({ params }: PageProps) {
       </header>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <section className="flex h-full flex-col gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-5">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-white/40">
               Definition

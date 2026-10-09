@@ -2,8 +2,9 @@
 // Copyright 2024-2026 Vorion LLC
 
 /**
- * Proof-chain / signal-propagation visualizer — a tamper-EVIDENT audit trail
- * (simulated). For one agent + window it renders how trust signals PROPAGATE
+ * Proof-chain / signal-propagation visualizer — an ordered, attributable audit
+ * trail (simulated; not a cryptographic guarantee). For one agent + window it
+ * renders how trust signals PROPAGATE
  * into outcomes as a set of vertical correlation traces:
  *
  *   signal → canary result → risk-accumulator crossing → circuit-breaker
@@ -23,14 +24,19 @@
 
 import { notFound } from 'next/navigation';
 import { ShieldCheck, CornerDownRight, AlertTriangle } from 'lucide-react';
+import type { Metadata } from 'next';
+import { RISK_ACCUMULATOR } from '@vorionsys/basis-spec';
 import {
   ensureHydrated,
   getAgents,
   getAgentInfo,
+  getAgentRiskEvidence,
   getAgentSignals,
   isPresetDuration,
   PRESET_DURATIONS,
 } from '../lib/data-source';
+import { accumulatorWord } from '../lib/insights';
+import { pageMetadata } from '../lib/page-metadata';
 import {
   buildProofChain,
   STAGE_ORDER,
@@ -47,7 +53,7 @@ import {
   OUTCOME_COLORS,
   tint,
 } from '../lib/status-colors';
-import { fmtDateTime, fmtSigned } from '../lib/format';
+import { fmtDateTime, fmtNum, fmtSigned } from '../lib/format';
 import { ExploreLink, exploreHref } from '../components/explore-link';
 import { ConceptTooltip } from '../components/tooltip';
 import { Panel, EmptyState } from '../components/panel';
@@ -230,6 +236,18 @@ function TraceColumn({ trace, window }: { trace: CorrelationTrace; window: strin
   );
 }
 
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  const agent = sp.agent?.trim() || DEFAULT_AGENT;
+  return pageMetadata({
+    title: `Proof chain · ${agent} · ${window}`,
+    description: `Ordered signal trail for ${agent} over the last ${window}: signals, canary results, accumulator failures and circuit-breaker events.`,
+    path: '/proof',
+    query: { agent, window },
+  });
+}
+
 /** Stage legend + counts strip. */
 function StageLegend({ byStage }: { byStage: Record<ProofStage, number> }) {
   return (
@@ -242,7 +260,12 @@ function StageLegend({ byStage }: { byStage: Record<ProofStage, number> }) {
             aria-hidden
           />
           <span className="text-xs text-white/70">{STAGE_META[stage].label}</span>
-          <span className="text-[11px] tabular-nums text-white/40">{byStage[stage]}</span>
+          <span className="text-[11px] tabular-nums text-white/55">
+            {byStage[stage]}
+            {byStage[stage] === 0 && stage !== 'signal' ? (
+              <span className="text-white/40"> · none emitted</span>
+            ) : null}
+          </span>
           {i < STAGE_ORDER.length - 1 && (
             <span className="ml-2 text-white/25" aria-hidden>
               →
@@ -270,6 +293,8 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
 
   const signals = getAgentSignals(agentId, window);
   const chain = buildProofChain(signals, order);
+  const evidence = getAgentRiskEvidence(window, agentId);
+  const riskStagesEmpty = chain.summary.byStage.risk === 0 && chain.summary.byStage.breaker === 0;
 
   const tier = info.tier as TierKey;
   const tierColor = TIER_COLORS[tier] ?? STATUS.neutral;
@@ -297,7 +322,7 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
           <div>
             <div className="flex items-center gap-2 text-[11px]">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/[0.08] px-2 py-0.5 font-semibold text-amber-200/90">
-                <ShieldCheck size={12} aria-hidden /> tamper-EVIDENT audit trail (simulated)
+                <ShieldCheck size={12} aria-hidden /> Ordered audit trail (simulated)
               </span>
             </div>
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-white/90">
@@ -333,11 +358,9 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
           <span className="font-bold">Synthetic, illustrative — not live data.</span> This is a
           read-only reconstruction of how signals propagated through a deterministic, seeded
           simulator: raw events → canary results → risk-accumulator crossings → circuit-breaker
-          decisions, grouped by correlation id. It is a{' '}
-          <span className="font-semibold">tamper-EVIDENT audit trail (simulated)</span> — an ordered,
-          attributable record, <span className="font-semibold">not</span> a cryptographic guarantee.
-          Any anchoring shown elsewhere is{' '}
-          <span className="font-semibold">simulated anchoring — not a cryptographic guarantee</span>.
+          decisions, grouped by correlation id. It is an ordered, attributable record of signals.
+          Nothing on this page is hashed, signed or anchored, so it is{' '}
+          <span className="font-semibold">not</span> tamper-proof and not a cryptographic guarantee.
           RAINBOW observes and records; it does not control agents.
         </p>
       </div>
@@ -390,6 +413,67 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
             </div>
           </div>
         </div>
+      </Panel>
+
+      {/* Accumulator — reconstructed from failures, the same series the
+          dashboard's risk panel and this agent's insight cite. */}
+      <Panel
+        title="Risk accumulator failures"
+        subtitle={`${agentId} · peak ${fmtNum(evidence.risk.peakInWindow)} · now ${fmtNum(evidence.risk.currentAccumulatorValue)} · ${accumulatorWord(evidence.risk.trend)} · last ${window}`}
+        footnote={`Reconstructed from failure signals: each adds P(T) × R to a rolling ${RISK_ACCUMULATOR.windowHours}h sum. Listed: the failures inside the ${RISK_ACCUMULATOR.windowHours}h ending at the in-window peak, largest first.${riskStagesEmpty ? ' The stream itself carries no risk-accumulator or circuit-breaker events for this agent and window, so those stage counts above are zero: the accumulator is not emitted as bus events here, only reconstructed.' : ''}`}
+      >
+        {evidence.contributors.length === 0 ? (
+          <p className="text-xs text-white/55">
+            No failures fed the accumulator in this window (peak {fmtNum(evidence.risk.peakInWindow)}).
+          </p>
+        ) : (
+          <div className="-mx-1 overflow-x-auto">
+            <table className="w-full min-w-[24rem] text-left text-[12px]">
+              <caption className="sr-only">Failures making up the accumulator peak</caption>
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-white/55">
+                  <th scope="col" className="px-1 py-1.5 font-medium">Time (UTC)</th>
+                  <th scope="col" className="px-1 py-1.5 font-medium">Factor</th>
+                  <th scope="col" className="px-1 py-1.5 font-medium">Risk</th>
+                  <th scope="col" className="px-1 py-1.5 font-medium">Type</th>
+                  <th scope="col" className="px-1 py-1.5 text-right font-medium">P(T) × R</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evidence.contributors.map((c) => (
+                  <tr key={c.signalId} className="border-t border-white/[0.06] text-white/70">
+                    <td className="px-1 py-1.5 tabular-nums">{fmtDateTime(c.at)}</td>
+                    <td className="px-1 py-1.5">
+                      {c.factorCode ? (
+                        <ExploreLink
+                          href={exploreHref(`/factor/${c.factorCode}`, { window })}
+                          className="font-mono"
+                        >
+                          {c.factorCode}
+                        </ExploreLink>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-1 py-1.5">{c.riskLevel ?? '—'}</td>
+                    <td className="px-1 py-1.5 font-mono text-[11px] text-white/55">
+                      {c.busSignalType ?? '—'}
+                    </td>
+                    <td className="px-1 py-1.5 text-right font-semibold tabular-nums">
+                      +{fmtNum(c.contribution)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {evidence.contributorCount > evidence.contributors.length && (
+              <p className="mt-1.5 px-1 text-[11px] text-white/45">
+                Showing the {evidence.contributors.length} largest of {evidence.contributorCount}{' '}
+                contributing failures.
+              </p>
+            )}
+          </div>
+        )}
       </Panel>
 
       {/* Traces */}

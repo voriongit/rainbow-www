@@ -4,8 +4,12 @@
 'use client';
 
 /**
- * Agent selector for the per-agent panels. Client component by necessity
- * (navigation on change); state lives in the URL — no browser storage.
+ * Scope selector: the whole fleet (default) or one agent. Client component by
+ * necessity (navigation on change); state lives in the URL — no browser storage.
+ *
+ * In the demo, an agent's label is its SCRIPTED archetype (what the simulator
+ * was told to do), not its computed trend, so it is prefixed "archetype:" —
+ * the trajectory panel is where the current trend is read.
  */
 
 import { useRouter } from 'next/navigation';
@@ -19,23 +23,30 @@ interface AgentOption {
 
 interface AgentSelectorProps {
   agents: AgentOption[];
+  /** Selected agent id; empty string = fleet scope. */
   current: string;
   duration: string;
+  /** When true, labels are scripted demo archetypes, not computed state. */
+  archetypes?: boolean;
 }
 
-export function AgentSelector({ agents, current, duration }: AgentSelectorProps) {
+export function AgentSelector({ agents, current, duration, archetypes = false }: AgentSelectorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   return (
-    <label className="flex items-center gap-2 text-xs text-white/50">
-      Agent
+    <label className="flex items-center gap-2 text-xs text-white/55">
+      Scope
       <select
+        aria-label="Scope: whole fleet or one agent"
         value={current}
         onChange={(e) =>
           startTransition(() => {
+            const agent = e.target.value;
             router.push(
-              `/?window=${duration}&agent=${encodeURIComponent(e.target.value)}`,
+              agent
+                ? `/?window=${duration}&agent=${encodeURIComponent(agent)}`
+                : `/?window=${duration}`,
               { scroll: false }
             );
           })
@@ -44,11 +55,15 @@ export function AgentSelector({ agents, current, duration }: AgentSelectorProps)
           isPending ? 'opacity-60' : ''
         }`}
       >
-        {agents.map((a) => (
-          <option key={a.agentId} value={a.agentId}>
-            {a.agentId} · {a.tier} · {a.label}
-          </option>
-        ))}
+        <option value="">Fleet · all {agents.length} agents</option>
+        <optgroup label={archetypes ? 'Agent · tier · scripted archetype' : 'Agent · tier'}>
+          {agents.map((a) => (
+            <option key={a.agentId} value={a.agentId}>
+              {a.agentId} · {a.tier}
+              {archetypes ? ` · archetype: ${a.label}` : ''}
+            </option>
+          ))}
+        </optgroup>
       </select>
     </label>
   );

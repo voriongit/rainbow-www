@@ -44,7 +44,8 @@ import {
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'A2A delegation network (synthetic) — RAINBOW',
+  title: 'A2A delegation network (synthetic)',
+  alternates: { canonical: '/network' },
   description:
     'A read-only, deterministic visualization of agent-to-agent escalation across a synthetic fleet — who escalates to whom, handler concentration, and policy-induced collusion edges. Not connected to live agents.',
 };

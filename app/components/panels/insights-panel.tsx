@@ -10,6 +10,8 @@ interface InsightsPanelProps {
   /** Active window, carried into drill-down links. */
   window?: string;
   subtitle?: string;
+  /** Shown when nothing is flagged, e.g. "for this agent" / "fleet-wide". */
+  emptyScope?: string;
 }
 
 /**
@@ -23,10 +25,10 @@ interface InsightsPanelProps {
  *
  * Used on both the dashboard (fleet-wide insights) and /agent (per-agent).
  */
-export function InsightsPanel({ insights, window, subtitle }: InsightsPanelProps) {
-  const sorted = insights
-    .slice()
-    .sort((a, b) => b.detectedAt.getTime() - a.detectedAt.getTime());
+export function InsightsPanel({ insights, window, subtitle, emptyScope = 'for this agent' }: InsightsPanelProps) {
+  // Already ordered most-severe first by lib/insights (every finding in one
+  // render shares the same detectedAt, so time order carried no information).
+  const sorted = insights;
 
   return (
     <Panel
@@ -41,7 +43,7 @@ export function InsightsPanel({ insights, window, subtitle }: InsightsPanelProps
       }
     >
       {sorted.length === 0 ? (
-        <EmptyState message="Nothing flagged for this agent in the window — no insights detected." />
+        <EmptyState message={`Nothing flagged ${emptyScope} in this window.`} />
       ) : (
         <ul className="flex flex-col gap-2.5">
           {sorted.map((insight) => (

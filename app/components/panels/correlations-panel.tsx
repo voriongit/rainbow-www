@@ -28,8 +28,8 @@ export function CorrelationsPanel({ correlations, window }: CorrelationsPanelPro
 
   return (
     <Panel
-      title="Cross-agent correlations"
-      subtitle="Derived from shared failing factors & shared correlation ids across agents"
+      title="Correlated events"
+      subtitle="Individual co-occurrences across agents (shared failing factors, shared correlation ids). Not the cluster count: one cluster can produce many events."
       badge={
         totalAlerts > 0 ? (
           <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-white/70">
@@ -39,7 +39,7 @@ export function CorrelationsPanel({ correlations, window }: CorrelationsPanelPro
       }
     >
       {totalAlerts === 0 ? (
-        <EmptyState message="No cross-agent correlations in this window." />
+        <EmptyState message="No correlated events in this window." />
       ) : (
         <div className="flex flex-col gap-4">
           {/* Pattern counts */}

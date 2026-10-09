@@ -17,7 +17,8 @@ import { CopyButton } from './copy-button';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Embeddable widgets — RAINBOW — Vorion',
+  title: 'Embeddable widgets',
+  alternates: { canonical: '/embed' },
   description:
     'Copy-paste iframe widgets over the RAINBOW Trust Analytics Observatory: a tier-spectrum mini, a single-agent trust card, and a fleet-health badge — all read-only over a deterministic synthetic simulator.',
 };

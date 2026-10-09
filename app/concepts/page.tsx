@@ -17,7 +17,9 @@ import { ExploreLink, exploreHref } from '../components/explore-link';
 import { ConceptsExplorer, type ExplorerConcept } from './concepts-explorer';
 
 export const metadata = {
-  title: 'Concepts — RAINBOW',
+  title: 'Concepts',
+  description: 'Every RAINBOW and BASIS term on one page, generated from the canonical @vorionsys/basis-spec constants.',
+  alternates: { canonical: '/concepts' },
 };
 
 export default function ConceptsPage() {

@@ -8,6 +8,7 @@ import { LineChart } from '../charts/line-chart';
 import { ExploreLink, exploreHref } from '../explore-link';
 import { InfoLink } from '../info-link';
 import { fmtNum } from '../../lib/format';
+import { accumulatorWord } from '../../lib/insights';
 
 interface RiskTrendPanelProps {
   risk: RiskTrend;
@@ -37,7 +38,9 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
     ? [
         {
           t: elbow.timestamp.getTime(),
-          label: cbCross ? 'Elbow · entered Breaker' : 'Elbow · entered Degraded',
+          label: cbCross
+            ? `Elbow · crossed CB ${RISK_ACCUMULATOR.cbThreshold}`
+            : `Elbow · crossed degraded ${RISK_ACCUMULATOR.degradedThreshold}`,
           color: cbCross ? '#dc2626' : '#ef4444',
         },
       ]
@@ -56,11 +59,11 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
             className="rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize"
             style={{ color: trendColor, backgroundColor: `${trendColor}1a` }}
           >
-            {risk.trend}
+            {accumulatorWord(risk.trend)}
           </span>
         </ExploreLink>
       }
-      footnote={`Each failure contributes P(T) × R per the BASIS canonical formula (P(T) = 3 + tier at STANDARD posture), computed by @vorionsys/rainbow. Thresholds: warning ≥ ${RISK_ACCUMULATOR.warningThreshold}, degraded ≥ ${RISK_ACCUMULATOR.degradedThreshold}, circuit breaker ≥ ${RISK_ACCUMULATOR.cbThreshold}.`}
+      footnote={`Each failure contributes P(T) × R per the BASIS canonical formula (P(T) = 3 + tier at STANDARD posture), computed by @vorionsys/rainbow. Thresholds: warning ≥ ${RISK_ACCUMULATOR.warningThreshold}, degraded ≥ ${RISK_ACCUMULATOR.degradedThreshold}, circuit breaker ≥ ${RISK_ACCUMULATOR.cbThreshold}. The Elbow marks the first sample at or above the highest threshold crossed: where continuous pressure would become a discrete state change. Direction compares the first and last quarter of the window.`}
     >
       {risk.samples.length === 0 ? (
         <EmptyState message={`No signals for ${agentId} in the last ${duration}.`} />
@@ -72,25 +75,25 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
                 Current
                 <InfoLink slug="metric-risk-accumulator" />
               </p>
-              <p className="text-2xl font-bold text-white">{fmtNum(risk.currentAccumulatorValue, 1)}</p>
+              <p className="text-2xl font-bold text-white">{fmtNum(risk.currentAccumulatorValue)}</p>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider text-white/40">
                 Peak in window
                 <InfoLink slug="metric-risk-accumulator" />
               </p>
-              <p className="text-sm font-semibold text-white/85">{fmtNum(risk.peakInWindow, 1)}</p>
+              <p className="text-sm font-semibold text-white/85">{fmtNum(risk.peakInWindow)}</p>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider text-white/40">
-                Warning breaches
+                Crossings into warning
                 <InfoLink slug="formula-risk-accumulator" />
               </p>
               <p className="text-sm font-semibold text-amber-400">{risk.warningBreaches}</p>
             </div>
             <div>
               <p className="text-[11px] uppercase tracking-wider text-white/40">
-                Degraded breaches
+                Crossings into degraded
                 <InfoLink slug="formula-risk-accumulator" />
               </p>
               <p className="text-sm font-semibold text-red-400">{risk.degradedBreaches}</p>

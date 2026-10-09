@@ -15,11 +15,24 @@ import { Panel } from '../components/panel';
 import { ExploreLink, exploreHref } from '../components/explore-link';
 import { BenchmarkRefSelector } from '../components/benchmark-ref-selector';
 import { FleetCompare } from '../components/fleet-compare';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<{ window?: string; ref?: string }>;
+}
+
+export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `Benchmark · ${window}`,
+    description: `The fleet compared against reference fleets over the last ${window}.`,
+    path: '/benchmark',
+    query: { window, ref: sp.ref },
+  });
 }
 
 export default async function BenchmarkPage({ searchParams }: PageProps) {

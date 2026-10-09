@@ -27,12 +27,15 @@ import {
   tint,
 } from '../../lib/status-colors';
 import { fmtNum, fmtSigned, fmtPct, fmtDateTime } from '../../lib/format';
+import { accumulatorWord } from '../../lib/insights';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { InfoLink } from '../../components/info-link';
 import { Panel, EmptyState } from '../../components/panel';
 import { SignalLog } from '../../components/signal-log';
 import { InsightsPanel } from '../../components/panels/insights-panel';
 import { LineChart } from '../../components/charts/line-chart';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +71,18 @@ function MiniStat({
       <div className="mt-1">{children}</div>
     </div>
   );
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { agentId } = await params;
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `${agentId} · ${window}`,
+    description: `${agentId} agent profile over the last ${window}: trajectory, risk accumulator, 16-factor health, insights and signal log.`,
+    path: `/agent/${agentId}`,
+    query: { window },
+  });
 }
 
 export default async function AgentProfilePage({ params, searchParams }: PageProps) {
@@ -112,7 +127,14 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
             <h1 className="font-mono text-2xl font-extrabold tracking-tight text-white/90">
               {agentId}
             </h1>
-            <p className="mt-1 text-sm text-white/55">{info.label}</p>
+            {info.label !== agentId && (
+              <p
+                className="mt-1 text-sm text-white/55"
+                title="What the demo simulator was scripted to do, not a computed state. The trajectory panel shows the current trend."
+              >
+                Scripted archetype: {info.label}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ExploreLink href={exploreHref(`/tier/${tier}`, { window })}>
@@ -155,7 +177,7 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
       {/* Primary panels */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Score trajectory */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Panel
             title="Score trajectory"
             subtitle={`${agentId} · last ${window}`}
@@ -230,10 +252,10 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
                 ),
               }}
             >
-              {risk.trend}
+              {accumulatorWord(risk.trend)}
             </span>
           }
-          footnote="Corrected accumulator: each failure contributes P(T) × R per the BASIS canonical formula. Thresholds: warning ≥ 60, degraded ≥ 120, circuit breaker ≥ 240."
+          footnote="Seeded rolling-24h accumulator, the same series this agent's insight cites: each failure contributes P(T) × R per the BASIS canonical formula. Thresholds: warning ≥ 60, degraded ≥ 120, circuit breaker ≥ 240. Direction compares the first and last quarter of the window."
         >
           {risk.samples.length === 0 ? (
             <EmptyState message={`No signals for ${agentId} in the last ${window}.`} />
@@ -242,20 +264,20 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                 <MiniStat label="Current" slug="metric-risk-accumulator">
                   <p className="text-2xl font-bold text-white">
-                    {fmtNum(risk.currentAccumulatorValue, 1)}
+                    {fmtNum(risk.currentAccumulatorValue)}
                   </p>
                 </MiniStat>
                 <MiniStat label="Peak in window" slug="formula-risk-accumulator">
                   <p className="text-sm font-semibold text-white/85">
-                    {fmtNum(risk.peakInWindow, 1)}
+                    {fmtNum(risk.peakInWindow)}
                   </p>
                 </MiniStat>
-                <MiniStat label="Warning breaches">
+                <MiniStat label="Crossings into warning">
                   <p className="text-sm font-semibold" style={{ color: STATUS.warn }}>
                     {risk.warningBreaches}
                   </p>
                 </MiniStat>
-                <MiniStat label="Degraded breaches">
+                <MiniStat label="Crossings into degraded">
                   <p className="text-sm font-semibold" style={{ color: STATUS.bad }}>
                     {risk.degradedBreaches}
                   </p>
@@ -271,7 +293,7 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
                 thresholds={[
                   { value: 60, label: 'warn', color: STATUS.warn },
                   { value: 120, label: 'degraded', color: STATUS.warnAlt },
-                  { value: 240, label: 'breaker', color: STATUS.bad },
+                  { value: 240, label: 'circuit breaker', color: STATUS.bad },
                 ]}
               />
             </div>
@@ -308,12 +330,14 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
                             href={exploreHref(`/factor/${factor.factorCode}`, { window })}
                             variant="block"
                             ariaLabel={`Factor ${factor.factorName} (${factor.factorCode})`}
-                            className={`flex items-center gap-3 px-2 py-1 ${noEvidence ? 'opacity-50' : ''}`}
+                            className={`flex items-center gap-2 px-2 py-1 sm:gap-3 ${noEvidence ? 'opacity-50' : ''}`}
                           >
                             <span className="w-24 shrink-0 truncate text-xs text-white/75">
                               {factor.factorName}
                             </span>
-                            <span className="w-20 shrink-0 font-mono text-[10px] text-white/35">
+                            {/* Code column hidden on phones: the row is a link to the
+                                factor page, which carries the code. */}
+                            <span className="hidden w-20 shrink-0 font-mono text-[10px] text-white/35 sm:inline">
                               {factor.factorCode}
                             </span>
                             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
@@ -385,7 +409,7 @@ export default async function AgentProfilePage({ params, searchParams }: PagePro
 
       {/* Observation ceiling — what if */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <Panel
             title="Observation ceiling — what if"
             subtitle={`${agentId} · trust capped by how observable it is`}

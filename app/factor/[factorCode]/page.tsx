@@ -20,6 +20,8 @@ import { InfoLink } from '../../components/info-link';
 import { Panel, EmptyState } from '../../components/panel';
 import { Stat } from '../../components/stat';
 import { SignalLog } from '../../components/signal-log';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +35,18 @@ interface FactorSpec {
 interface PageProps {
   params: Promise<{ factorCode: string }>;
   searchParams: Promise<{ window?: string }>;
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { factorCode } = await params;
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `${factorCode} · ${window}`,
+    description: `Trust factor ${factorCode} across the fleet over the last ${window}: per-agent health and the signals behind it.`,
+    path: `/factor/${factorCode}`,
+    query: { window },
+  });
 }
 
 export default async function FactorPage({ params, searchParams }: PageProps) {
@@ -179,7 +193,7 @@ export default async function FactorPage({ params, searchParams }: PageProps) {
         <Panel
           title="Across the fleet"
           subtitle={`Agents exercising ${code} · last ${window}`}
-          className="lg:col-span-2"
+          className="min-w-0 lg:col-span-2"
           footnote="Success = succeeded and not blocked. Sorted by failures (highest first), then total activity."
         >
           {agentRows.length === 0 ? (

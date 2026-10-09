@@ -15,12 +15,26 @@ import { getConcept, conceptSlug } from '../../lib/glossary';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { Panel } from '../../components/panel';
 import { SignalLog } from '../../components/signal-log';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ type: string }>;
   searchParams: Promise<{ window?: string }>;
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { type } = await params;
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `${type} · ${window}`,
+    description: `Fleet ${type} signals over the last ${window}.`,
+    path: `/signal-type/${type}`,
+    query: { window },
+  });
 }
 
 export default async function SignalTypePage({ params, searchParams }: PageProps) {
@@ -66,7 +80,7 @@ export default async function SignalTypePage({ params, searchParams }: PageProps
         <Panel
           title="Occurrences"
           subtitle={`Fleet-wide ${type} signals · ${window}`}
-          className="lg:col-span-2"
+          className="min-w-0 lg:col-span-2"
           badge={
             <span className="text-[11px] uppercase tracking-wider text-white/40">
               {signals.length} signals

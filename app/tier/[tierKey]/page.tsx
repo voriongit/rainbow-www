@@ -19,12 +19,26 @@ import { fmtNum } from '../../lib/format';
 import { Panel, EmptyState } from '../../components/panel';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { InfoLink } from '../../components/info-link';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ tierKey: string }>;
   searchParams: Promise<{ window?: string }>;
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { tierKey } = await params;
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `Tier ${tierKey} · ${window}`,
+    description: `Agents currently in trust tier ${tierKey} and their trajectories over the last ${window}.`,
+    path: `/tier/${tierKey}`,
+    query: { window },
+  });
 }
 
 export default async function TierPage({ params, searchParams }: PageProps) {
@@ -176,7 +190,7 @@ export default async function TierPage({ params, searchParams }: PageProps) {
         <Panel
           title="Agents in this tier"
           subtitle={`${members.length} simulated agent${members.length === 1 ? '' : 's'} currently resolving to ${key}`}
-          className="lg:col-span-2"
+          className="min-w-0 lg:col-span-2"
         >
           {members.length === 0 ? (
             <EmptyState message={`No agents currently in ${key}.`} />

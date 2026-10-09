@@ -65,7 +65,8 @@ export function ProofPicker({
         >
           {agents.map((opt) => (
             <option key={opt.agentId} value={opt.agentId}>
-              {opt.agentId} · {opt.tier} · {opt.label}
+              {opt.agentId} · {opt.tier}
+              {opt.label !== opt.agentId ? ` · archetype: ${opt.label}` : ''}
             </option>
           ))}
         </select>

@@ -25,12 +25,26 @@ import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { InfoLink } from '../../components/info-link';
 import { Panel } from '../../components/panel';
 import { SignalLog } from '../../components/signal-log';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ clusterId: string }>;
   searchParams: Promise<{ window?: string }>;
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { clusterId } = await params;
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `Cluster ${clusterId} · ${window}`,
+    description: `Anomaly cluster ${clusterId} over the last ${window}: member agents, shared failing factors and their signals.`,
+    path: `/cluster/${clusterId}`,
+    query: { window },
+  });
 }
 
 export default async function ClusterPage({ params, searchParams }: PageProps) {
