@@ -8,6 +8,7 @@ import { TRUST_FACTORS } from '@vorionsys/basis-spec';
 import './globals.css';
 import { ensureHydrated, getAgents } from './lib/data-source';
 import { CONCEPTS } from './lib/glossary';
+import { SITE_URL } from './lib/page-metadata';
 import { TIER_ORDER, tierName } from './lib/tiers';
 import { CommandPalette, type CommandItem } from './components/command-palette';
 import { MobileNav } from './components/mobile-nav';
@@ -54,14 +55,18 @@ function buildCommandItems(): CommandItem[] {
   const agents: CommandItem[] = getAgents().map((a) => ({
     kind: 'agent',
     label: a.agentId,
-    sublabel: `${a.label} · ${a.tier}`,
+    sublabel: a.label !== a.agentId ? `${a.tier} · archetype: ${a.label}` : a.tier,
     href: `/agent/${a.agentId}`,
   }));
   return [...STATIC_PAGES, ...agents, ...STATIC_TAXONOMY];
 }
 
 export const metadata: Metadata = {
-  title: 'RAINBOW — Trust Analytics Observatory — Vorion',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'RAINBOW — Trust Analytics Observatory — Vorion',
+    template: '%s — RAINBOW',
+  },
   description:
     'Read-only observability dashboard for RAINBOW (Recorded Analytics Involving Non-Binary Orchestration Window): trust trajectories, tier distribution, risk accumulator trends, factor health, and fleet anomaly clustering over a simulated Trust Signal Bus stream.',
   icons: {

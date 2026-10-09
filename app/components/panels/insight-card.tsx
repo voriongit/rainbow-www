@@ -7,9 +7,11 @@
  * One explorable insight card. Each rule-based finding from RAINBOW's detection
  * engine becomes a tappable surface: clicking the card header toggles an
  * in-place disclosure that surfaces the REAL evidence the insight already
- * carries — the trust factor(s) it names, the agents involved, its evidence
- * chain (when the proof plane populates one), and claim-safe "where to look
- * next" drill-down links into the factor / agent / concept pages.
+ * carries — the trust factor(s) it names, the agents involved, the failures
+ * that produced an accumulator peak, the per-agent numbers behind a fleet
+ * finding, and claim-safe "where to look next" drill-down links. The call to
+ * action names what the disclosure actually holds; the proof-plane evidence
+ * chain is rendered only when one is attached (never in rainbow 0.3).
  *
  * Honesty boundary: this component fabricates nothing. Driving factors are only
  * the canonical TRUST_FACTORS codes the insight literally names (in its
@@ -30,7 +32,8 @@ import { ExploreLink, exploreHref } from '../explore-link';
 import { ConceptTooltip } from '../tooltip';
 import { conceptSlug } from '../../lib/glossary';
 import { TIER_COLORS, type TierKey } from '../../lib/tiers';
-import { fmtDateTime } from '../../lib/format';
+import { fmtDateTime, fmtNum } from '../../lib/format';
+import { insightMeta } from '../../lib/insights';
 import { STATUS, tint } from '../../lib/status-colors';
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -94,6 +97,19 @@ export function InsightCard({ insight, window }: InsightCardProps) {
   const color = SEVERITY_COLORS[insight.severity] ?? STATUS.neutral;
   const factors = drivingFactors(insight);
   const categorySlug = conceptSlug.insight(insight.category);
+  const meta = insightMeta(insight);
+  const contributing = meta?.contributing ?? [];
+  const rows = meta?.rows ?? [];
+  // Promise only what the disclosure can show: contributing signals when the
+  // finding carries them, the per-agent breakdown for fleet findings, else details.
+  const cta =
+    contributing.length > 0
+      ? 'Show contributing signals'
+      : rows.length > 0
+        ? `Show the ${rows.length} agent${rows.length === 1 ? '' : 's'}`
+        : 'Show details';
+  const scopeLabel =
+    meta?.scope === 'fleet' ? 'Fleet' : insight.agentIds.length === 1 ? insight.agentIds[0] : null;
 
   useEffect(() => {
     if (!open) return;
@@ -136,6 +152,18 @@ export function InsightCard({ insight, window }: InsightCardProps) {
           <span className="text-[10px] uppercase tracking-wider" style={{ color }}>
             {insight.severity}
           </span>
+          {scopeLabel && (
+            <span
+              className="rounded border border-white/10 px-1.5 py-px text-[10px] text-white/50"
+              title={
+                meta?.scope === 'fleet'
+                  ? 'Fleet scope: cites fleet statistics and names agents; never one agent’s scores'
+                  : 'Agent scope: computed from the same series as this agent’s panels'
+              }
+            >
+              {scopeLabel}
+            </span>
+          )}
           {factors.length > 0 && (
             <span className="text-[10px] text-white/35">
               {factors.length} factor{factors.length > 1 ? 's' : ''}
@@ -159,7 +187,7 @@ export function InsightCard({ insight, window }: InsightCardProps) {
         </p>
         {!open && (
           <p className="mt-1 text-[10px] uppercase tracking-wider text-cyan-300/45">
-            Tap to explore the evidence
+            {cta}
           </p>
         )}
       </button>
@@ -224,13 +252,60 @@ export function InsightCard({ insight, window }: InsightCardProps) {
             </div>
           )}
 
-          {/* Evidence chain — the supporting proof events the insight carries.
-              Reserved for the proof plane; shown honestly as empty until then. */}
-          <div className="mt-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
-              Evidence chain
-            </p>
-            {insight.evidenceChain.length > 0 ? (
+          {/* Contributing signals — the failures whose P(T) × R sum is the peak. */}
+          {contributing.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                Contributing signals · largest first
+              </p>
+              <ul className="mt-1.5 flex flex-col gap-1 border-l border-white/10 pl-3">
+                {contributing.map((c) => (
+                  <li key={c.signalId} className="text-[11px] text-white/55">
+                    <span className="tabular-nums text-white/35">{fmtDateTime(c.at)}</span>{' '}
+                    · {c.factorCode ?? 'no factor'} · {c.riskLevel ?? '—'} ·{' '}
+                    <span className="font-semibold tabular-nums text-white/75">
+                      +{fmtNum(c.contribution)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[10px] text-white/35">
+                Each failure adds P(T) × R to the rolling 24h sum; these are the failures inside the 24h
+                ending at the peak.
+              </p>
+            </div>
+          )}
+
+          {/* Fleet findings — the per-agent numbers the sentence summarizes. */}
+          {rows.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                Per agent
+              </p>
+              <ul className="mt-1.5 flex flex-col gap-1">
+                {rows.map((r) => (
+                  <li key={r.agentId} className="flex flex-wrap gap-x-2 text-[11px]">
+                    <ExploreLink
+                      href={exploreHref(`/agent/${r.agentId}`, { window })}
+                      variant="inline"
+                      className="font-mono text-white/75"
+                    >
+                      {r.agentId}
+                    </ExploreLink>
+                    <span className="tabular-nums text-white/50">{r.detail}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Proof-plane evidence chain — rendered only when one is attached.
+              @vorionsys/rainbow leaves it empty in this version, so say so once. */}
+          {insight.evidenceChain.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                Evidence chain
+              </p>
               <ul className="mt-1.5 flex flex-col gap-1 border-l border-white/10 pl-3">
                 {insight.evidenceChain.map((ev) => (
                   <li key={ev.eventId} className="text-[11px] text-white/55">
@@ -241,14 +316,13 @@ export function InsightCard({ insight, window }: InsightCardProps) {
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="mt-1 text-[11px] leading-relaxed text-white/40">
-                No per-event proof chain on this finding yet — it is derived from the
-                window analytics above. The driving factor and agent links carry you to
-                the underlying signal logs.
-              </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-[10px] leading-relaxed text-white/35">
+              Rule-based finding over the window analytics. No proof-plane evidence chain is attached
+              in this version.
+            </p>
+          )}
 
           {/* Where to look next — claim-safe drill-down. Observability only:
               these lead to read-only deep-dives, not remediations. */}
@@ -283,6 +357,22 @@ export function InsightCard({ insight, window }: InsightCardProps) {
                   Open {id} →
                 </ExploreLink>
               ))}
+              {typeof meta?.clusterId === 'string' && (
+                <ExploreLink
+                  href={exploreHref(`/cluster/${meta.clusterId}`, { window })}
+                  className="text-cyan-300/80"
+                >
+                  Open the cluster →
+                </ExploreLink>
+              )}
+              {meta?.scope === 'agent' && insight.agentIds.length === 1 && (
+                <ExploreLink
+                  href={exploreHref('/proof', { agent: insight.agentIds[0], window })}
+                  className="text-cyan-300/80"
+                >
+                  Signal log &amp; proof chain →
+                </ExploreLink>
+              )}
             </div>
           </div>
         </div>

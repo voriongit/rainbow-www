@@ -100,6 +100,12 @@ interface Archetype {
   canaryEvery: number;
   /** p = progress through history, 0 (start) → 1 (now); >1 for live extension */
   behavior: (p: number) => PhaseBehavior;
+  /**
+   * RNG seed key when it differs from agentId. Lets an agent be renamed without
+   * changing its seeded stream (helix/wisp were renumbered to close a gap in
+   * the roster; their behaviour is byte-identical to the old ids).
+   */
+  seedKey?: string;
 }
 
 const FOUNDATION = ['CT-COMP', 'CT-REL', 'CT-OBS', 'CT-TRANS', 'CT-ACCT', 'CT-SAFE'];
@@ -235,7 +241,7 @@ const ARCHETYPES: Archetype[] = [
   //    the window, which RAINBOW should surface as an anomaly cluster. ──
   ...(['orion-07', 'lyra-08', 'vega-09'] as const).map((agentId, i): Archetype => ({
     agentId,
-    label: 'Cluster anomaly (shared CT-SEC / CT-ID failures)',
+    label: 'Cluster anomaly (CT-SEC / CT-ID)',
     startScore: 690 + i * 25,
     cadenceMinutes: 17 + i,
     observationTier: 'GRAY_BOX',
@@ -290,7 +296,8 @@ const ARCHETYPES: Archetype[] = [
     }),
   },
   {
-    agentId: 'helix-13',
+    agentId: 'helix-12',
+    seedKey: 'helix-13',
     label: 'High-volume trusted',
     startScore: 880,
     cadenceMinutes: 7,
@@ -304,7 +311,8 @@ const ARCHETYPES: Archetype[] = [
     }),
   },
   {
-    agentId: 'wisp-14',
+    agentId: 'wisp-13',
+    seedKey: 'wisp-14',
     label: 'Qualification climb',
     startScore: 215,
     cadenceMinutes: 16,
@@ -415,7 +423,7 @@ export class FleetSimulator {
     this.generatedUpToMs = this.epochMs;
 
     this.states = ARCHETYPES.map((archetype) => {
-      const rng = mulberry32((fnv1a(archetype.agentId) ^ opts.seed) >>> 0);
+      const rng = mulberry32((fnv1a(archetype.seedKey ?? archetype.agentId) ^ opts.seed) >>> 0);
       return {
         archetype,
         rng,

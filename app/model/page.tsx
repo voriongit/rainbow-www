@@ -42,7 +42,8 @@ import {
 import { simulatorControlPort } from '../lib/control/simulator-control-port';
 
 export const metadata: Metadata = {
-  title: 'Control model (illustrative) — RAINBOW',
+  title: 'Control model (illustrative)',
+  alternates: { canonical: '/model' },
   description:
     'An illustrative, read-only model of how a future vendor-neutral agent-control layer would resolve configuration across kernel, sidecar, and control-plane. Not connected to live agents.',
 };

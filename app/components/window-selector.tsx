@@ -14,7 +14,8 @@ import { useTransition } from 'react';
 interface WindowSelectorProps {
   durations: string[];
   current: string;
-  agentId: string;
+  /** Selected agent; undefined = fleet scope. */
+  agentId?: string;
 }
 
 export function WindowSelector({ durations, current, agentId }: WindowSelectorProps) {
@@ -36,7 +37,7 @@ export function WindowSelector({ durations, current, agentId }: WindowSelectorPr
           aria-pressed={d === current}
           onClick={() =>
             startTransition(() => {
-              router.push(`/?window=${d}&agent=${encodeURIComponent(agentId)}`, {
+              router.push(agentId ? `/?window=${d}&agent=${encodeURIComponent(agentId)}` : `/?window=${d}`, {
                 scroll: false,
               });
             })

@@ -4,11 +4,15 @@
 'use client';
 
 /**
- * Tasteful "Add to Home Screen" chip. Android/Chrome uses the captured
- * `beforeinstallprompt`; iOS Safari (which has no such event) gets a short
- * manual instruction instead. Hidden when already installed/standalone, and a
- * dismissal is remembered (a tiny UI-chrome flag in localStorage — not trust
- * data). Floats above the mobile bottom nav.
+ * "Add to Home Screen" sheet — opened on request only, never on its own.
+ *
+ * It used to pop up on load and remember a dismissal in localStorage; the site
+ * otherwise refuses browser storage, and a sheet that cannot remember being
+ * dismissed keeps returning over the content. Now it listens for the
+ * `rainbow:open-install` event (dispatched by <InstallButton/> in the footer)
+ * and nothing persists. Android/Chrome uses the captured `beforeinstallprompt`;
+ * iOS Safari gets the manual Share → Add to Home Screen instruction; other
+ * browsers are told plainly that they offer no install.
  */
 
 import { useEffect, useState } from 'react';
@@ -18,7 +22,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const DISMISS_KEY = 'rainbow.installDismissed';
+export const OPEN_INSTALL_EVENT = 'rainbow:open-install';
 
 export function InstallPrompt() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
@@ -26,54 +30,29 @@ export function InstallPrompt() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    const standalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (navigator as unknown as { standalone?: boolean }).standalone === true;
-    if (standalone) return;
-    try {
-      if (localStorage.getItem(DISMISS_KEY)) return;
-    } catch {
-      /* private mode — proceed without persistence */
-    }
-
     const onBIP = (e: Event) => {
+      // Keep the browser's own mini-infobar from appearing; offer it on request.
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
+    };
+    const onOpen = () => {
+      const ua = navigator.userAgent;
+      const isIOS = /iphone|ipad|ipod/i.test(ua);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+      setIosHint(isIOS && isSafari);
       setShow(true);
     };
     window.addEventListener('beforeinstallprompt', onBIP);
-
-    const ua = navigator.userAgent;
-    const isIOS =
-      /iphone|ipad|ipod/i.test(ua) ||
-      (navigator as unknown as { standalone?: boolean }).standalone !== undefined;
-    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-    // Defer out of the effect body (lint: react-hooks/set-state-in-effect) — also
-    // avoids an immediate render cascade on mount.
-    let raf = 0;
-    if (isIOS && isSafari) {
-      raf = requestAnimationFrame(() => {
-        setIosHint(true);
-        setShow(true);
-      });
-    }
-
+    window.addEventListener(OPEN_INSTALL_EVENT, onOpen);
     return () => {
       window.removeEventListener('beforeinstallprompt', onBIP);
-      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener(OPEN_INSTALL_EVENT, onOpen);
     };
   }, []);
 
   if (!show) return null;
 
-  const dismiss = () => {
-    setShow(false);
-    try {
-      localStorage.setItem(DISMISS_KEY, '1');
-    } catch {
-      /* ignore */
-    }
-  };
+  const dismiss = () => setShow(false);
 
   const install = async () => {
     if (!deferred) return;
@@ -88,7 +67,11 @@ export function InstallPrompt() {
   };
 
   return (
-    <div className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.5rem)] z-50 mx-auto max-w-sm rounded-xl border border-white/15 bg-[#0c0c14]/95 p-3 shadow-2xl backdrop-blur md:bottom-4">
+    <div
+      role="dialog"
+      aria-label="Install RAINBOW"
+      className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.5rem)] z-50 mx-auto max-w-sm rounded-xl border border-white/15 bg-[#0c0c14]/95 p-3 shadow-2xl backdrop-blur md:bottom-4"
+    >
       <div className="flex items-start gap-3">
         <div className="flex-1 text-xs">
           <div className="font-semibold text-white/90">Install RAINBOW</div>
@@ -98,13 +81,15 @@ export function InstallPrompt() {
                 Tap <span className="text-white/80">Share</span> →{' '}
                 <span className="text-white/80">Add to Home Screen</span>.
               </>
-            ) : (
+            ) : deferred ? (
               'Add it to your home screen for a full-screen, app-like view.'
+            ) : (
+              'This browser does not offer an install option here. Use its menu (Add to Home Screen / Install app) if available.'
             )}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          {!iosHint && (
+          {!iosHint && deferred && (
             <button
               type="button"
               onClick={install}

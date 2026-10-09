@@ -10,8 +10,11 @@ import { conceptSlug } from '../../lib/glossary';
 import { fmtPct } from '../../lib/format';
 
 interface TransitionsPanelProps {
-  transitions: StateTransitionSummary;
+  /** Omit for a pooled fleet view: summed signal counts are meaningful,
+   *  tier transitions replayed over pooled deltas are not. */
+  transitions?: StateTransitionSummary;
   distribution: SignalDistribution;
+  /** Panel subtitle scope, e.g. an agent id or "Fleet · pooled counts". */
   agentId: string;
   duration: string;
 }
@@ -29,13 +32,15 @@ export function TransitionsPanel({
   agentId,
   duration,
 }: TransitionsPanelProps) {
-  const counters = [
-    { label: 'Promotions', value: transitions.tierPromotions, color: '#22c55e', info: undefined },
-    { label: 'Demotions', value: transitions.tierDemotions, color: '#ef4444', info: undefined },
-    { label: 'CB trips', value: transitions.cbTrips, color: '#dc2626', info: 'formula-circuit-breaker' },
-    { label: 'Degraded entries', value: transitions.cbDegradedEntries, color: '#f59e0b', info: 'formula-risk-accumulator' },
-    { label: 'CB resets', value: transitions.cbResets, color: '#06b6d4', info: 'formula-circuit-breaker' },
-  ];
+  const counters = transitions
+    ? [
+        { label: 'Promotions', value: transitions.tierPromotions, color: '#22c55e', info: undefined },
+        { label: 'Demotions', value: transitions.tierDemotions, color: '#ef4444', info: undefined },
+        { label: 'CB trips', value: transitions.cbTrips, color: '#dc2626', info: 'formula-circuit-breaker' },
+        { label: 'Degraded entries', value: transitions.cbDegradedEntries, color: '#f59e0b', info: 'formula-risk-accumulator' },
+        { label: 'CB resets', value: transitions.cbResets, color: '#06b6d4', info: 'formula-circuit-breaker' },
+      ]
+    : [];
 
   const total = distribution.total;
   const outcomes = (['success', 'failure', 'blocked'] as const).map((key) => ({
@@ -46,8 +51,8 @@ export function TransitionsPanel({
 
   return (
     <Panel
-      title="State transitions & signal mix"
-      subtitle={`${agentId} · last ${duration}`}
+      title={transitions ? 'State transitions & signal mix' : 'Signal mix'}
+      subtitle={transitions ? `${agentId} · last ${duration}` : agentId}
     >
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-2">
@@ -171,7 +176,7 @@ export function TransitionsPanel({
         )}
 
         {/* Lifecycle changes */}
-        {transitions.lifecycleChanges.length > 0 && (
+        {transitions && transitions.lifecycleChanges.length > 0 && (
           <div>
             <p className="mb-2 text-[11px] uppercase tracking-wider text-white/40">Lifecycle changes</p>
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/55">

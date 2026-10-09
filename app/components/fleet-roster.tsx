@@ -37,7 +37,7 @@ interface FleetRosterProps {
   agents: RosterAgent[];
   sparklines: Record<string, { t: number; v: number }[]>;
   duration: string;
-  selectedAgentId: string;
+  selectedAgentId?: string;
 }
 
 const TIER_OPTIONS = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];

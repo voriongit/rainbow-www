@@ -27,7 +27,8 @@ import { DEFAULT_OPERATION_MODE } from '../lib/control/operation-modes';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Control cards (illustrative) — RAINBOW',
+  title: 'Control cards (illustrative)',
+  alternates: { canonical: '/control' },
   description:
     'A read-only index of per-agent control cards: how an illustrative, vendor-neutral agent-control model would resolve an effective configuration for each agent. Not connected to live agents.',
 };

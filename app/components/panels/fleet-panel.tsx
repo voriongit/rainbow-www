@@ -11,7 +11,7 @@ import type { SimAgentInfo } from '../../lib/simulator';
 interface FleetPanelProps {
   fleet: OrchestrationSnapshot;
   agents: SimAgentInfo[];
-  selectedAgentId: string;
+  selectedAgentId?: string;
   duration: string;
   /** Per-agent downsampled trajectory for the roster sparklines. */
   sparklines: Record<string, { t: number; v: number }[]>;

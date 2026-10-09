@@ -17,12 +17,26 @@ import { STATUS, tint } from '../../lib/status-colors';
 import { ExploreLink, exploreHref } from '../../components/explore-link';
 import { Panel } from '../../components/panel';
 import { SignalLog } from '../../components/signal-log';
+import type { Metadata } from 'next';
+import { pageMetadata } from '../../lib/page-metadata';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ riskLevel: string }>;
   searchParams: Promise<{ window?: string }>;
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { riskLevel } = await params;
+  const sp = await searchParams;
+  const window = isPresetDuration(sp.window) ? sp.window : '24h';
+  return pageMetadata({
+    title: `Risk ${riskLevel} · ${window}`,
+    description: `Fleet signals at risk level ${riskLevel} over the last ${window}.`,
+    path: `/risk/${riskLevel}`,
+    query: { window },
+  });
 }
 
 export default async function RiskLevelPage({ params, searchParams }: PageProps) {
@@ -105,7 +119,7 @@ export default async function RiskLevelPage({ params, searchParams }: PageProps)
         <Panel
           title="Signals at this risk level"
           subtitle={`Fleet-wide ${level} signals · ${window}`}
-          className="lg:col-span-2"
+          className="min-w-0 lg:col-span-2"
           badge={
             <span className="text-[11px] uppercase tracking-wider text-white/40">
               {signals.length} signals

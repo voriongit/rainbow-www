@@ -24,9 +24,20 @@ interface TierSpectrumProps {
   averageScore: number;
   medianScore: number;
   duration: string;
+  /** Why an empty band is empty, e.g. "none in this seed", so a zero never
+   *  reads as a filter bug. */
+  emptyReason?: string;
 }
 
-export function TierSpectrum({ byTier, totalAgents, averageScore, medianScore, duration }: TierSpectrumProps) {
+export function TierSpectrum({
+  byTier,
+  totalAgents,
+  averageScore,
+  medianScore,
+  duration,
+  emptyReason = 'no agents',
+}: TierSpectrumProps) {
+  const emptyTiers = TIER_ORDER.filter((t) => (byTier[t] ?? 0) === 0);
   const gradient = `linear-gradient(90deg, ${TIER_ORDER.map((t) => TIER_COLORS[t]).join(', ')})`;
 
   return (
@@ -58,7 +69,8 @@ export function TierSpectrum({ byTier, totalAgents, averageScore, medianScore, d
             <Link
               key={t}
               href={exploreHref(`/tier/${t}`, { window: duration })}
-              aria-label={`Tier ${t} ${tierName(t)}: ${count} agent${count === 1 ? '' : 's'}`}
+              aria-label={`Tier ${t} ${tierName(t)}: ${occupied ? `${count} agent${count === 1 ? '' : 's'}` : emptyReason}`}
+              title={occupied ? undefined : `${t}: ${emptyReason}`}
               className="flex flex-col items-center rounded-lg border px-1 py-2 text-center outline-none [touch-action:manipulation] transition-colors hover:brightness-125 focus-visible:ring-1 focus-visible:ring-white/40"
               style={{
                 borderColor: occupied ? `${color}55` : 'rgba(255,255,255,0.06)',
@@ -77,6 +89,11 @@ export function TierSpectrum({ byTier, totalAgents, averageScore, medianScore, d
           );
         })}
       </div>
+      {emptyTiers.length > 0 && (
+        <p className="mt-2 text-[11px] text-white/45">
+          {emptyTiers.join(', ')}: {emptyReason}.
+        </p>
+      )}
     </section>
   );
 }
