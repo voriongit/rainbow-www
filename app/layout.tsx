@@ -2,15 +2,18 @@
 // Copyright 2024-2026 Vorion LLC
 
 import type { Metadata, Viewport } from 'next';
+import { connection } from 'next/server';
 import { Analytics } from '@vercel/analytics/next';
 import { Inter } from 'next/font/google';
 import { TRUST_FACTORS } from '@vorionsys/basis-spec';
 import './globals.css';
-import { ensureHydrated, getAgents } from './lib/data-source';
+import { ensureHydrated, getAgents, getProvenance } from './lib/data-source';
+import { PUBLIC_ONLY_PREFIXES, isLiveDeployment, isPublicOnlyPath } from './lib/deployment';
 import { CONCEPTS } from './lib/glossary';
-import { SITE_URL } from './lib/page-metadata';
+import { PRIVATE_ROBOTS, SITE_URL } from './lib/page-metadata';
 import { TIER_ORDER, tierName } from './lib/tiers';
 import { CommandPalette, type CommandItem } from './components/command-palette';
+import { LiveUnavailable } from './components/live-unavailable';
 import { MobileNav } from './components/mobile-nav';
 import { SwRegister } from './components/pwa/sw-register';
 import { InstallPrompt } from './components/pwa/install-prompt';
@@ -51,17 +54,19 @@ const STATIC_TAXONOMY: CommandItem[] = [
 ];
 
 /** Build the global command-palette index (server-side, from live + canonical data). */
-function buildCommandItems(): CommandItem[] {
+function buildCommandItems(live: boolean): CommandItem[] {
+  // The live deployment answers 404 for the modeled/illustrative pages.
+  const pages = live ? STATIC_PAGES.filter((page) => !isPublicOnlyPath(page.href)) : STATIC_PAGES;
   const agents: CommandItem[] = getAgents().map((a) => ({
     kind: 'agent',
     label: a.agentId,
     sublabel: a.label !== a.agentId ? `${a.tier} · archetype: ${a.label}` : a.tier,
     href: `/agent/${a.agentId}`,
   }));
-  return [...STATIC_PAGES, ...agents, ...STATIC_TAXONOMY];
+  return [...pages, ...agents, ...STATIC_TAXONOMY];
 }
 
-export const metadata: Metadata = {
+const PUBLIC_METADATA: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: 'RAINBOW — Trust Analytics Observatory — Vorion',
@@ -94,6 +99,17 @@ export const metadata: Metadata = {
   },
 };
 
+const LIVE_METADATA: Metadata = {
+  title: { default: 'RAINBOW Live — Vorion', template: '%s — RAINBOW Live' },
+  description: 'Private live view of agent trust telemetry.',
+  icons: PUBLIC_METADATA.icons,
+  robots: PRIVATE_ROBOTS,
+};
+
+export function generateMetadata(): Metadata {
+  return isLiveDeployment() ? LIVE_METADATA : PUBLIC_METADATA;
+}
+
 export const viewport: Viewport = {
   // Matches the body background so the mobile browser chrome + PWA status bar
   // blend into the dark dashboard. `cover` is required for env(safe-area-inset-*)
@@ -109,7 +125,16 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Render at request time, never at build time. The deployment, and with it
+  // the data source, is read from the environment a page is SERVED from; a page
+  // prerendered during the build would carry the build machine's answer (the
+  // public layout, the seeded roster in the search palette) onto the live site.
+  await connection();
   await ensureHydrated();
+  const live = isLiveDeployment();
+  // The live deployment says why, instead of drawing an empty fleet that reads as healthy.
+  const provenance = getProvenance();
+  const unavailable = live && !provenance.available;
   return (
     <html lang="en" className={inter.className}>
       {/* Bottom padding clears the fixed mobile nav (mobile only); desktop unaffected. */}
@@ -124,18 +149,22 @@ export default async function RootLayout({
         </a>
         <MotionProvider>
           <div id="main-content" tabIndex={-1} className="outline-none">
-            {children}
+            {unavailable ? <LiveUnavailable reason={provenance.reason} /> : children}
           </div>
         </MotionProvider>
         {/* Global chrome — hidden in print output (e.g. the /report snapshot) so
             exported PDFs carry only page content. */}
         <div className="print:hidden">
-          <CommandPalette items={buildCommandItems()} />
-          <MobileNav />
-          <InstallPrompt />
+          {!unavailable && <CommandPalette items={buildCommandItems(live)} />}
+          {!unavailable && <MobileNav omit={live ? PUBLIC_ONLY_PREFIXES : []} />}
+          {/* Offline caching, install prompts and third-party analytics are
+              public-site features. On the live deployment they would leave real
+              telemetry in browser storage or send agent ids (which are in the
+              URLs) to a third party. */}
+          {!live && <InstallPrompt />}
         </div>
-        <SwRegister />
-        <Analytics />
+        {!live && <SwRegister />}
+        {!live && <Analytics />}
       </body>
     </html>
   );

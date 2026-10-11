@@ -4,6 +4,7 @@
 import { RISK_ACCUMULATOR } from '@vorionsys/basis-spec';
 import type { RiskTrend } from '@vorionsys/rainbow';
 import { Panel, EmptyState } from '../panel';
+import { AccumulatorUndercount } from '../accumulator-undercount';
 import { LineChart } from '../charts/line-chart';
 import { ExploreLink, exploreHref } from '../explore-link';
 import { InfoLink } from '../info-link';
@@ -69,6 +70,7 @@ export function RiskTrendPanel({ risk, agentId, duration }: RiskTrendPanelProps)
         <EmptyState message={`No signals for ${agentId} in the last ${duration}.`} />
       ) : (
         <div className="flex flex-col gap-4">
+          <AccumulatorUndercount count={risk.excludedFromAccumulator} scope="for this agent" />
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
             <div>
               <p className="text-[11px] uppercase tracking-wider text-white/40">

@@ -24,8 +24,14 @@ const TABS = [
   { href: '/concepts', label: 'Concepts', icon: BookOpen, match: (p: string) => p.startsWith('/concepts') },
 ] as const;
 
-export function MobileNav() {
+export function MobileNav({
+  omit = [],
+}: {
+  /** Tab hrefs this deployment does not serve. */
+  omit?: readonly string[];
+}) {
   const pathname = usePathname();
+  const tabs = TABS.filter((t) => !omit.includes(t.href));
 
   return (
     <nav
@@ -33,7 +39,7 @@ export function MobileNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#0c0c14]/95 pb-safe-b backdrop-blur md:hidden"
     >
       <ul className="flex">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const active = t.match(pathname);
           const Icon = t.icon;
           return (

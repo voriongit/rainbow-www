@@ -11,7 +11,7 @@
 import { notFound } from 'next/navigation';
 import { TRUST_TIERS, TRUST_FACTORS } from '@vorionsys/basis-spec';
 
-import { ensureHydrated, getTierMembers, isPresetDuration } from '../../lib/data-source';
+import { ensureHydrated, getProvenance, getTierMembers, isPresetDuration } from '../../lib/data-source';
 import { TIER_COLORS, TIER_ORDER, tierName, type TierKey } from '../../lib/tiers';
 import { LIFECYCLE_COLORS, tint } from '../../lib/status-colors';
 import { conceptSlug } from '../../lib/glossary';
@@ -189,7 +189,7 @@ export default async function TierPage({ params, searchParams }: PageProps) {
         {/* Agents in this tier */}
         <Panel
           title="Agents in this tier"
-          subtitle={`${members.length} simulated agent${members.length === 1 ? '' : 's'} currently resolving to ${key}`}
+          subtitle={`${members.length} ${getProvenance().mode === 'live' ? '' : 'simulated '}agent${members.length === 1 ? '' : 's'} currently resolving to ${key}`}
           className="min-w-0 lg:col-span-2"
         >
           {members.length === 0 ? (

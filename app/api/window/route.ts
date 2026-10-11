@@ -16,6 +16,7 @@ import {
   getAgentRiskTrend,
   getProvenance,
   getWindowResult,
+  unavailableResponse,
 } from '../../lib/data-source';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
   const window = params.get('window') ?? undefined;
   const agent = params.get('agent') ?? undefined;
   const provenance = getProvenance();
+  const unavailable = unavailableResponse(provenance);
+  if (unavailable) return unavailable;
 
   return Response.json(
     {

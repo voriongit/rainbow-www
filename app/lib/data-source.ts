@@ -9,18 +9,22 @@
  * simulated stream to "now", then reads through the Rainbow facade.
  * No accessor mutates trust data on behalf of a request.
  *
- * SEAM (#5 persistent store): a configured Supabase store that actually
- * holds signals flips the read path to live. Signals are replayed into a
- * fresh Rainbow (collector + in-memory store) so risk/log/correlation
- * queries — which read the collector — see the same rows as window
- * analytics. The persistent store is NOT passed into Rainbow: ingest always
- * store.puts, and sharing the instance would duplicate rows on replay.
+ * Two deployments, two data policies (see ./deployment):
+ *
+ *   public  always the seeded simulator. The signal store is never constructed,
+ *           whatever the environment holds, so this deployment cannot serve
+ *           real telemetry by construction.
+ *   live    always real signals, never the simulator. They come from a
+ *           LiveSignalFeed over the Supabase store: bounded in memory, topped up
+ *           from the store on an interval, and honest when it has nothing to
+ *           show (see `Provenance.available`).
  */
 
 import 'server-only';
 
 import { cache } from 'react';
 import {
+  MemoryWindowStore,
   Rainbow,
   WINDOW_DURATION_MS,
   computeDelegationHealth,
@@ -42,14 +46,16 @@ import {
   type FleetSource,
   type SourceMode,
 } from './fleet-source';
-import { SupabaseWindowStore } from './supabase-window-store';
+import { isLiveDeployment, type Deployment } from './deployment';
+import { LiveSignalFeed } from './live-feed';
+import type { SignalRepository } from './signal-repository';
+import { SupabaseSignalRepository } from './supabase-signal-repository';
 import {
   computeCorrectedRiskTrend,
   RISK_SEED_WINDOW_MS,
 } from './corrected-risk-trend';
 import { CrossAgentCorrelator } from './cross-agent-correlator';
 import { DelegationService, type DelegationPolicy } from './delegation-service';
-import { replayStoreIntoRainbow } from './replay';
 import {
   deriveAgentInsights,
   deriveFleetInsights,
@@ -79,6 +85,13 @@ interface ReadSource {
 /** What the site is actually serving right now, derived — never hardcoded. */
 export interface Provenance {
   mode: SourceMode;
+  deployment: Deployment;
+  /**
+   * False only on the live deployment while it has nothing real to show: the
+   * store is not configured, cannot be read, or no agent has reported. The
+   * pages then say so instead of drawing an empty fleet that reads as healthy.
+   */
+  available: boolean;
   /** Signals currently loaded. */
   signalCount: number;
   agentCount: number;
@@ -88,99 +101,136 @@ export interface Provenance {
 
 const globalCache = globalThis as unknown as {
   __rainbowSource?: ReadSource;
-  __rainbowStore?: SupabaseWindowStore;
-  __rainbowHydration?: Promise<number>;
+  __rainbowRepository?: SupabaseSignalRepository;
+  __rainbowFeed?: LiveSignalFeed;
+  __rainbowEmptyLive?: ReadSource;
 };
 
 /**
- * The persistent store, when one is configured. Returns undefined otherwise —
- * a missing store is a normal deployment state, not an error.
+ * The signal store, when this is the live deployment and it is configured.
+ *
+ * THE GUARANTEE: the public deployment returns undefined here before it reads
+ * any setting, so it never builds a client, never queries, and never accepts
+ * ingest, even if store credentials are present in its environment.
  */
-function getStore(): SupabaseWindowStore | undefined {
+function getRepository(): SupabaseSignalRepository | undefined {
+  if (!isLiveDeployment()) return undefined;
   const url = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) return undefined;
-  globalCache.__rainbowStore ??= new SupabaseWindowStore({ url, serviceKey });
-  return globalCache.__rainbowStore;
+  globalCache.__rainbowRepository ??= new SupabaseSignalRepository({ url, serviceKey });
+  return globalCache.__rainbowRepository;
 }
 
-/** The store, for the ingest route. Undefined when none is configured. */
-export function getIngestStore(): SupabaseWindowStore | undefined {
-  return getStore();
+/** The store, for the ingest route. Undefined unless live and configured. */
+export function getIngestRepository(): SignalRepository | undefined {
+  return getRepository();
 }
 
-/**
- * Drop the cached read source so the next read re-derives its mode.
- *
- * Called after ingest: the very first real signal has to be able to flip the
- * site from simulated to live within the same process, rather than waiting for
- * a cold start.
- */
-export function invalidateSource(): void {
-  globalCache.__rainbowSource = undefined;
+function positiveInt(name: string): number | undefined {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
-/**
- * Load persisted signals into the store's mirror, once per process.
- *
- * Async because the read path is synchronous by interface (WindowStore), so
- * hydration has to happen at an explicit boundary. Async entry points (the
- * API routes) await this so their first response is already live; a failure
- * is logged and reported as zero signals, which degrades to the simulator
- * with a stated reason rather than serving a silently empty fleet.
- */
-export function ensureHydrated(): Promise<number> {
-  const store = getStore();
-  if (!store) return Promise.resolve(0);
-  if (!globalCache.__rainbowHydration) {
-    globalCache.__rainbowHydration = store
-      .hydrate()
-      .then((n) => {
-        // Drop any source built against an empty mirror before hydrate finished.
-        invalidateSource();
-        return n;
-      })
-      .catch((err) => {
-        console.error('[rainbow] hydrate failed - falling back to the simulator:', err);
-        globalCache.__rainbowHydration = undefined;
-        return 0;
-      });
-  }
-  return globalCache.__rainbowHydration;
+function getFeed(): LiveSignalFeed | undefined {
+  const repo = getRepository();
+  if (!repo) return undefined;
+  globalCache.__rainbowFeed ??= new LiveSignalFeed({
+    repo,
+    maxSignals: positiveInt('RAINBOW_LIVE_MAX_SIGNALS'),
+    perAgentCapacity: positiveInt('RAINBOW_LIVE_AGENT_CAPACITY'),
+    ttlMs: positiveInt('RAINBOW_LIVE_REFRESH_MS'),
+    onError: (error) =>
+      console.error('[rainbow] live refresh failed:', error instanceof Error ? error.message : error),
+  });
+  return globalCache.__rainbowFeed;
+}
+
+/** After an ingest: read the store again on the next request instead of at the next interval. */
+export function markFeedStale(): void {
+  globalCache.__rainbowFeed?.markStale();
 }
 
 /**
- * Live only when a store is configured AND it actually holds signals.
- *
- * A configured-but-empty store reports as simulated with a reason rather than
- * as an empty real fleet: an empty dashboard reads as "the fleet is healthy"
- * when the truth is "nothing has reported yet".
+ * Bring the live data up to date if it is due. Async because the read path is
+ * synchronous by design, so refreshing has to happen at an explicit boundary:
+ * the root layout and every route handler await this before they read. Cheap
+ * when nothing is due, and it never throws; a failure is reported through
+ * `getProvenance()`. Returns the number of signals loaded (always 0 on the
+ * public deployment).
  */
+export async function ensureHydrated(): Promise<number> {
+  const feed = getFeed();
+  if (!feed) return 0;
+  await feed.refresh();
+  return feed.status().signalCount;
+}
+
+function utc(ms: number): string {
+  return `${new Date(ms).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
+
 function computeProvenance(): Provenance {
-  const store = getStore();
-  if (!store) {
+  if (!isLiveDeployment()) {
     return {
       mode: 'simulated',
+      deployment: 'public',
+      available: true,
       signalCount: 0,
       agentCount: 0,
-      reason: 'No signal store configured - showing the seeded demo fleet.',
+      reason:
+        'Public demo: always synthetic. A seeded fleet stands in for live agents, and no real telemetry is read here.',
     };
   }
-  const agentCount = store.agentIds().length;
-  const signalCount = store.size;
-  if (signalCount === 0) {
-    return {
-      mode: 'simulated',
-      signalCount: 0,
-      agentCount: 0,
-      reason: 'Signal store configured but empty - no agent has reported yet.',
-    };
+
+  const unavailable = (reason: string): Provenance => ({
+    mode: 'live',
+    deployment: 'live',
+    available: false,
+    signalCount: 0,
+    agentCount: 0,
+    reason,
+  });
+
+  const feed = getFeed();
+  if (!feed) {
+    return unavailable('The signal store is not configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).');
+  }
+  const status = feed.status();
+  if (!status.hydrated) {
+    return unavailable(
+      status.lastError
+        ? `The signal store could not be read (${status.lastError}).`
+        : 'The signal store has not been read yet.',
+    );
+  }
+  if (status.signalCount === 0) {
+    return unavailable('The signal store is reachable but empty: no agent has reported yet.');
+  }
+
+  // A live fleet that is quietly out of date or cut short must say so.
+  const notes = [
+    `Live telemetry from ${status.agentCount} reporting agent${status.agentCount === 1 ? '' : 's'}, ${status.signalCount} signals`,
+  ];
+  if (status.refreshedAt) notes.push(`store last read ${utc(status.refreshedAt)}`);
+  if (status.lastError) {
+    notes.push(`the latest refresh failed (${status.lastError}), so this may be out of date`);
+  }
+  if (status.truncated && status.oldestSignalMs !== undefined) {
+    notes.push(`history is limited to the most recent signals, from ${utc(status.oldestSignalMs)}`);
+  }
+  if (status.truncatedAgents.length > 0) {
+    notes.push(
+      `${status.truncatedAgents.length} agent${status.truncatedAgents.length === 1 ? ' has' : 's have'} more history than is kept (${status.truncatedAgents.slice(0, 3).join(', ')}${status.truncatedAgents.length > 3 ? ', …' : ''})`,
+    );
   }
   return {
     mode: 'live',
-    signalCount,
-    agentCount,
-    reason: `Live telemetry from ${agentCount} reporting agent${agentCount === 1 ? '' : 's'}.`,
+    deployment: 'live',
+    available: true,
+    signalCount: status.signalCount,
+    agentCount: status.agentCount,
+    reason: `${notes.join('. ')}.`,
   };
 }
 
@@ -188,28 +238,52 @@ function computeProvenance(): Provenance {
  * Provenance for the current request.
  *
  * Memoized per render: it is read by the page, by every API route, and by
- * getSource() itself, and recomputing it each time would re-walk the store.
- * Callers must await ensureHydrated() first so a configured store is loaded.
+ * getSource() itself, and recomputing it each time would re-walk the feed.
+ * Callers must await ensureHydrated() first so the live feed is current.
  */
 export const getProvenance = cache(computeProvenance);
 
-function getSource(): ReadSource {
-  const provenance = getProvenance();
-  const cached = globalCache.__rainbowSource;
-  if (cached && cached.source.mode === provenance.mode) return cached;
+/**
+ * True only on the live deployment while it has nothing real to show. The root
+ * layout then renders an explanation instead of the page, but Next still runs
+ * the page, so a page returns early rather than compute (and fail) over an
+ * empty fleet. Always false on the public deployment.
+ */
+export function liveDataUnavailable(): boolean {
+  return !getProvenance().available;
+}
 
-  if (provenance.mode === 'live') {
-    const store = getStore()!;
-    const live = new LiveFleetSource(store);
-    // Fresh Rainbow (its own MemoryWindowStore). Passing `store` here and then
-    // ingesting would store.put each row again and enqueue a duplicate flush.
-    const rainbow = new Rainbow({
-      resolveInitialScore: (agentId, at) => live.resolveScoreAt(agentId, at),
-    });
-    replayStoreIntoRainbow(store, rainbow);
-    globalCache.__rainbowSource = { source: live, rainbow };
-    return globalCache.__rainbowSource;
+/** A 503 for the API routes while the live deployment has nothing real to serve. */
+export function unavailableResponse(provenance: Provenance): Response | undefined {
+  if (provenance.available) return undefined;
+  return Response.json(
+    { error: 'No live telemetry available', provenance },
+    { status: 503, headers: { 'cache-control': 'no-store' } },
+  );
+}
+
+function getSource(): ReadSource {
+  if (isLiveDeployment()) {
+    const feed = getFeed();
+    if (feed) {
+      // The feed hands out an immutable generation; nothing to cache here.
+      const { rainbow, source } = feed.current;
+      return { source, rainbow };
+    }
+    // Live but unconfigured: an empty fleet (the pages show the reason), and
+    // never the simulator.
+    if (!globalCache.__rainbowEmptyLive) {
+      const store = new MemoryWindowStore();
+      globalCache.__rainbowEmptyLive = {
+        source: new LiveFleetSource(store),
+        rainbow: new Rainbow({ store }),
+      };
+    }
+    return globalCache.__rainbowEmptyLive;
   }
+
+  const cached = globalCache.__rainbowSource;
+  if (cached) return cached;
 
   let simRef: FleetSimulator | undefined;
   const rainbow = new Rainbow({
@@ -293,6 +367,11 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   const requested = agents.find((a) => a.agentId === agentRaw);
   const agentInfo =
     requested ?? agents.find((a) => a.agentId === DEFAULT_AGENT) ?? agents[0];
+  if (!agentInfo) {
+    // Pages check liveDataUnavailable() first, so this only guards a caller that
+    // forgets to (the live deployment before any agent has reported).
+    throw new Error('No agents have reported yet');
+  }
   const agentId = agentInfo.agentId;
 
   const from = new Date(now.getTime() - WINDOW_DURATION_MS[duration]);
@@ -355,7 +434,7 @@ export function getDashboardData(durationRaw?: string, agentRaw?: string): Dashb
   };
 }
 
-/** Roster of simulated agents (read-only) */
+/** Roster of agents (read-only) */
 export function getAgents(): SimAgentInfo[] {
   return getReadySource().source.agents();
 }
