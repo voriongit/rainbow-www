@@ -12,6 +12,10 @@ trajectories), not a pass/fail bit.
 Observability, not control: this surface only reads. There are no
 enforcement actions and no mutation paths to trust data.
 
+One build, two deployments: the **public demo** at rainbow.vorion.org is always
+synthetic, and a **private live view** behind Cloudflare Access shows real
+telemetry only. See [Private live view](#private-live-view).
+
 ## Panels
 
 The dashboard opens on the **fleet** (`/`); `?agent=<id>` drills into one agent.
@@ -61,27 +65,104 @@ The dashboard opens on the **fleet** (`/`); `?agent=<id>` drills into one agent.
   to `helix-12` / `wisp-13` with their original RNG seed (`seedKey`), so their
   behaviour is unchanged; old `/agent/*` links redirect.
 
-### Read-only API
+### API
 
 | Route | Returns |
 | --- | --- |
 | `GET /api/agents` | fleet roster (`synthetic` derived from provenance) |
 | `GET /api/window?window=24h&agent=cascade-03` | windowed analytics + corrected risk trend |
 | `GET /api/fleet?window=24h` | fleet orchestration snapshot |
+| `POST /api/signals` | live view only: ingest signals (404 on the public demo) |
+
+On the live view the read routes need an Access identity like every page, and
+answer `503` with the reason while there is nothing real to show.
 
 ## Seams for upstream work
 
 - **#3 rainbow-decontaminate** — done: the decontamination landed in
   `@vorionsys/rainbow` (0.2.x/0.3.0); the dashboard consumes the library's canonical
   `computeRiskTrend` from npm and keeps only a thin seeding/windowing adapter.
-- **#5 persistent store** — done: `SupabaseWindowStore` + `POST /api/signals`.
-  Hydrate loads the mirror; live mode **replays** those rows into a fresh
-  Rainbow so the collector (risk, signal log, correlations) sees the same
-  signals as window analytics. Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-  (server-only), `RAINBOW_INGEST_TOKEN`. Apply `sql/rainbow-signals.sql` first.
+- **#5 persistent store** — done, for the private live view only:
+  `SupabaseSignalRepository` + `POST /api/signals`, read through
+  `LiveSignalFeed` (`app/lib/live-feed.ts`). See [Private live view](#private-live-view).
 - **#6 producers/simulator** — replace `app/lib/simulator.ts` with the shared
   ecosystem simulator, keeping the `FleetSimulator` surface
   (`ensureUpTo`, `agents`, `resolveScoreAt`).
+
+## Private live view
+
+A second deployment of the same build, for real telemetry. `RAINBOW_DEPLOYMENT=live`
+selects it; anything else (including unset or a typo) is the public demo.
+
+| | Public demo (`rainbow.vorion.org`) | Private live view |
+| --- | --- | --- |
+| Data | seeded simulator, always | signals agents report, only |
+| Signal store | never read, even if configured | Supabase, required |
+| `POST /api/signals` | 404 | bearer token, idempotent |
+| Who can see it | anyone | a verified Cloudflare Access identity |
+| Modeled pages (`/lab`, `/network`, `/benchmark`, `/model`, `/control`, `/embed`) | yes | 404 |
+| Indexing, link previews, offline cache, analytics | yes | none |
+
+### Fail-closed behaviour
+
+- Every request except `POST /api/signals` must carry a valid Access token
+  (`Cf-Access-Jwt-Assertion` header or `CF_Authorization` cookie). The app
+  verifies it itself against the team's signing keys, RS256 only, for this
+  application's AUD, so a request that reaches the Worker without passing
+  Access is refused: 401 without a token, 403 with a bad one, 503 if the keys
+  cannot be fetched.
+- With `CF_ACCESS_TEAM_DOMAIN` or `CF_ACCESS_AUD` missing, every page answers 503.
+- With no store, an unreachable store, or no agent reported yet, pages say so and
+  the API answers 503 with the reason. It never falls back to the simulator.
+- The data is reloaded from the store every 15 minutes and topped up every 10 seconds
+  (or right after an ingest), so every Worker isolate sees every ingest. If a
+  refresh fails, the last good data stays up and the page says it may be out of date.
+
+### Set up, in this order
+
+1. **Access application.** In Cloudflare Zero Trust, create a self-hosted
+   application for the live hostname (`rainbow-live.vorion.org` in
+   `wrangler.live.jsonc`; change it if you prefer) with an Allow policy naming
+   who may see it. Note its **AUD tag** and your team domain
+   (`<team>.cloudflareaccess.com`).
+2. **Producer access to `/api/signals`.** Producers are machines. Either add a
+   second Access application for `<hostname>/api/signals` with a **Bypass**
+   policy (the route still requires its bearer token), or keep it behind Access
+   and give producers an Access **service token** in addition to the bearer token.
+3. **Database.** Run `sql/rainbow-signals.sql` in the Supabase SQL editor. It is
+   safe to re-run, and it upgrades a table created by an earlier version
+   (de-duplicating rows a retry stored twice).
+4. **Secrets**, each with `npx wrangler secret put NAME -c wrangler.live.jsonc`:
+   `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `RAINBOW_INGEST_TOKEN`.
+5. **Deploy:** `npm run deploy:cf:live`. The config disables the `workers.dev`
+   and preview URLs, which Access would not cover.
+
+### Producer contract
+
+`POST /api/signals` with `Authorization: Bearer <RAINBOW_INGEST_TOKEN>` and a
+JSON body of one signal or an array of up to 1000 (`app/lib/ingested-signal-schema.ts`).
+
+- **Retries are safe.** A signal is identified by `(tenantId, signalId)`; a repeat
+  is skipped, and the response reports `inserted` and `duplicates`. Retry the
+  whole batch after a timeout or a 5xx.
+- **Send `scoreAfter`** (your engine's score after the signal). It is
+  authoritative for the roster and the start of every window. Without it a score
+  is the sum of the deltas received.
+- **Send `tierAfter` and `riskLevel`** on failures. The risk accumulator can only
+  count a failure that has both; the dashboard says how many it could not count.
+- Rejected with the offending signal and field named: `tierAfter` outside 0–7,
+  a `riskLevel` that is not a BASIS level (any letter case is accepted),
+  `scoreAfter` outside 0–1000, `|delta|` over 1000, unknown `busSignalType` or
+  `severity`, or a timestamp more than 5 minutes in the future. A rejected batch
+  stores nothing.
+
+### Memory budget
+
+A Worker isolate has 128 MB. The view holds the newest 50,000 signals of the
+last 31 days, up to 10,000 per agent, and says on the page when history was cut
+short. Tune with `RAINBOW_LIVE_MAX_SIGNALS`, `RAINBOW_LIVE_AGENT_CAPACITY` and
+`RAINBOW_LIVE_REFRESH_MS`.
 
 ## Dependency note
 
@@ -89,20 +170,30 @@ The dashboard opens on the **fleet** (`/`); `?agent=<id>` drills into one agent.
 packed tarball under `vendor/` (a `file:` dependency) while unpublished; now that the
 package is published, that has been replaced with the registry version.
 
+Score trajectories replay each signal's `delta` from the score at the window's
+start. When a producer's deltas and declared `scoreAfter` disagree, the
+trajectory drifts from the declared score; the package change that anchors
+trajectories on `scoreAfter` closes that gap once released.
+
 ## Develop
 
 ```bash
 npm install
-npm run dev         # http://localhost:3000
-npm run typecheck   # tsc --noEmit
-npm run build       # production build
+npm run dev              # http://localhost:3000 (public demo)
+npm run typecheck        # tsc --noEmit
+npm run lint
+npm test                 # vitest
+npm run build            # production build
+npm run preview:cf       # Cloudflare build, public config, local workerd
+npm run preview:cf:live  # same build, live config (set the secrets in .dev.vars)
 ```
 
 ## Scope & limitations
 
-- **Demo fleet** (default) — 13 scripted archetypes; relative story is seeded.
-- **Live** — store configured and non-empty. Reads fail open to the demo if
-  hydrate fails; ingest fails closed (503) without token+store.
+- **Public demo** — 13 scripted archetypes; relative story is seeded. Never real data.
+- **Private live view** — real signals only, behind Access; it never shows the
+  demo, even when it has nothing to show. Ingest fails closed (503) without
+  token and store.
 - Delegation on `/lab` is a modeled policy over the loaded stream, not native
   A2A delegation. Dashboard correlations are derived from co-occurrence in
   that same stream (demo or live).

@@ -2,28 +2,38 @@
 // Copyright 2024-2026 Vorion LLC
 
 /**
- * POST /api/signals — ingest real trust signals into rainbow.
+ * POST /api/signals — ingest real trust signals into the LIVE deployment.
  *
- * This is the half that did not exist. Until it did, rainbow.vorion.org could
- * only ever serve the seeded simulator, and its read endpoints said so with a
- * hardcoded `synthetic: true`. A producer that posts here is persisted to
- * Supabase, and the read path flips itself to live on the next request.
+ * The public deployment has no store and no ingest: it answers 404 here, so
+ * rainbow.vorion.org can only ever serve the seeded simulator.
  *
  * Auth is a bearer token (RAINBOW_INGEST_TOKEN), compared in constant time.
  * FAIL-CLOSED: with no token configured, or no store configured, ingest is
- * disabled and returns 503 — it never silently accepts and drops.
+ * disabled and returns 503 — it never silently accepts and drops. Producers are
+ * machines, so this route is the one the Access gate (middleware.ts) lets
+ * through to its own token check.
+ *
+ * Idempotent: a signal is identified by (tenantId, signalId) and a repeat is
+ * dropped by the store, so a producer may retry any batch, including after a
+ * timeout or a 5xx, without double-counting a failure into the risk accumulator.
  *
  * Body: one IngestedSignal, or an array of up to 1000.
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
-import { ingestBodySchema } from '../../lib/ingested-signal-schema';
-import { getIngestStore, invalidateSource } from '../../lib/data-source';
+import { isLiveDeployment } from '../../lib/deployment';
+import { parseIngestBody } from '../../lib/ingested-signal-schema';
+import { getIngestRepository, markFeedStale } from '../../lib/data-source';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const INSERT_TIMEOUT_MS = 20_000;
+/** A producer clock this far ahead is a bug, and a future timestamp would sit in every window. */
+const MAX_FUTURE_SKEW_MS = 5 * 60_000;
+
+const NO_STORE = { 'cache-control': 'no-store' };
 
 function tokenMatches(presented: string, expected: string): boolean {
   const a = Buffer.from(presented);
@@ -38,74 +48,128 @@ function isAuthorized(request: NextRequest, expected: string): boolean {
   return tokenMatches(header.slice('Bearer '.length).trim(), expected);
 }
 
+/**
+ * Read the body, giving up as soon as it passes `maxBytes`. Checking only after
+ * `request.text()` would buffer an oversized chunked upload in full first.
+ */
+async function readBodyCapped(request: NextRequest, maxBytes: number): Promise<string | undefined> {
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
+}
+
 export async function POST(request: NextRequest) {
+  if (!isLiveDeployment()) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404, headers: NO_STORE });
+  }
+
   const expected = process.env.RAINBOW_INGEST_TOKEN;
   if (!expected) {
     return NextResponse.json(
       { error: 'Ingest disabled: RAINBOW_INGEST_TOKEN is not configured' },
-      { status: 503 },
+      { status: 503, headers: NO_STORE },
     );
   }
 
   if (!isAuthorized(request, expected)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: NO_STORE });
   }
 
-  const store = getIngestStore();
-  if (!store) {
+  const repo = getIngestRepository();
+  if (!repo) {
     return NextResponse.json(
       { error: 'Ingest disabled: no signal store configured' },
-      { status: 503 },
+      { status: 503, headers: NO_STORE },
     );
   }
 
   const declaredLength = Number(request.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413, headers: NO_STORE });
   }
 
-  const rawText = await request.text();
-  if (rawText.length > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  const rawText = await readBodyCapped(request, MAX_BODY_BYTES);
+  if (rawText === undefined) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413, headers: NO_STORE });
   }
 
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(rawText);
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400, headers: NO_STORE });
   }
 
-  const parsed = ingestBodySchema.safeParse(parsedJson);
-  if (!parsed.success) {
+  const parsed = parseIngestBody(parsedJson);
+  if (!parsed.ok) {
     return NextResponse.json(
-      { error: 'Invalid signal', issues: parsed.error.issues.slice(0, 20) },
-      { status: 400 },
+      { error: parsed.error, issues: parsed.issues },
+      { status: 400, headers: NO_STORE },
     );
   }
 
-  const signals = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
+  const signals = parsed.signals;
 
-  for (const signal of signals) {
-    store.put(signal as unknown as Parameters<typeof store.put>[0]);
+  const latestAllowed = Date.now() + MAX_FUTURE_SKEW_MS;
+  const future = signals.filter((signal) => signal.timestamp.getTime() > latestAllowed);
+  if (future.length > 0) {
+    return NextResponse.json(
+      {
+        error: 'Signal timestamps are in the future',
+        hint: 'Check the producer clock. Allowed skew is 5 minutes.',
+        signalIds: future.slice(0, 20).map((signal) => signal.signalId),
+      },
+      { status: 400, headers: NO_STORE },
+    );
   }
 
+  let inserted: number;
   try {
-    await store.flush();
+    ({ inserted } = await repo.insert(
+      signals as unknown as Parameters<typeof repo.insert>[0],
+      AbortSignal.timeout(INSERT_TIMEOUT_MS),
+    ));
   } catch (err) {
-    console.error('[rainbow] ingest flush failed:', err);
+    console.error('[rainbow] ingest insert failed:', err instanceof Error ? err.message : err);
+    // A batch may have been written in part; show whatever was.
+    markFeedStale();
     return NextResponse.json(
-      { error: 'Accepted into memory but persistence failed', accepted: signals.length },
-      { status: 502 },
+      {
+        error: 'Persistence failed',
+        hint: 'Retrying the same batch is safe: signals already stored are skipped.',
+      },
+      { status: 502, headers: NO_STORE },
     );
   }
 
-  // The read path caches one source per mode; the first real signal must be
-  // able to flip it from simulated to live.
-  invalidateSource();
+  // The first read after an ingest should see it, not wait out the interval.
+  markFeedStale();
 
   return NextResponse.json(
-    { accepted: signals.length, agentIds: [...new Set(signals.map((s) => s.agentId))] },
-    { status: 202, headers: { 'cache-control': 'no-store' } },
+    {
+      accepted: signals.length,
+      inserted,
+      duplicates: signals.length - inserted,
+      agentIds: [...new Set(signals.map((s) => s.agentId))],
+    },
+    { status: 202, headers: NO_STORE },
   );
 }

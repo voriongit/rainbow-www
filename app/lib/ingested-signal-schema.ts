@@ -18,6 +18,7 @@
  */
 
 import { z } from 'zod';
+import { MAX_TRUST_SCORE, MIN_TRUST_SCORE, RISK_LEVELS } from '@vorionsys/basis-spec';
 
 /** Mirrors rainbow's vendored BusSeverity values. */
 export const BUS_SEVERITIES = ['low', 'medium', 'high', 'critical', 'emergency'] as const;
@@ -50,6 +51,24 @@ export const OBSERVATION_TIER_KEYS = [
   'VERIFIED_BOX',
 ] as const;
 
+/**
+ * BASIS action risk levels (READ, LOW, MEDIUM, HIGH, CRITICAL, LIFE_CRITICAL).
+ * The risk accumulator looks these up by exact key, so a value outside this set
+ * would be silently left out of it. Reject it here instead, and accept any
+ * letter case: `critical` from a producer using the contracts RiskLevel
+ * vocabulary becomes `CRITICAL`.
+ */
+export const RISK_LEVEL_KEYS = Object.keys(RISK_LEVELS) as [string, ...string[]];
+
+const riskLevelSchema = z
+  .string()
+  .max(200)
+  .transform((value) => value.trim().toUpperCase())
+  .pipe(z.enum(RISK_LEVEL_KEYS));
+
+/** Highest canonical trust tier index (T0-T7). */
+const MAX_TIER_INDEX = 7;
+
 export const ingestedSignalSchema = z.object({
   signalId: z.string().min(1).max(200),
   agentId: z.string().min(1).max(200),
@@ -59,13 +78,13 @@ export const ingestedSignalSchema = z.object({
   severity: z.enum(BUS_SEVERITIES).optional(),
   success: z.boolean(),
   factorCode: z.string().max(200).optional(),
-  riskLevel: z.string().max(200).optional(),
-  delta: z.number().finite(),
+  riskLevel: riskLevelSchema.optional(),
+  delta: z.number().finite().min(-MAX_TRUST_SCORE).max(MAX_TRUST_SCORE),
   blocked: z.boolean(),
   blockReason: z.string().max(1000).optional(),
   correlationId: z.string().max(200).optional(),
-  scoreAfter: z.number().finite().optional(),
-  tierAfter: z.number().optional(),
+  scoreAfter: z.number().finite().min(MIN_TRUST_SCORE).max(MAX_TRUST_SCORE).optional(),
+  tierAfter: z.number().int().min(0).max(MAX_TIER_INDEX).optional(),
   /**
    * Free-form producer metadata. `observationTier` is read here when present;
    * an agent that does not declare one is treated as BLACK_BOX, which is the
@@ -76,8 +95,56 @@ export const ingestedSignalSchema = z.object({
 
 export type ValidatedIngestedSignal = z.infer<typeof ingestedSignalSchema>;
 
-/** A batch POST body: one signal or an array of them. */
-export const ingestBodySchema = z.union([
-  ingestedSignalSchema,
-  z.array(ingestedSignalSchema).min(1).max(1000),
-]);
+/** Most signals accepted in one request. */
+export const MAX_BATCH = 1000;
+
+export interface IngestIssue {
+  /** Where the problem is: `delta` for a single signal, `[3].delta` within a batch. */
+  path: string;
+  message: string;
+}
+
+export type IngestBodyResult =
+  | { ok: true; signals: ValidatedIngestedSignal[] }
+  | { ok: false; error: string; issues: IngestIssue[] };
+
+function formatPath(path: ReadonlyArray<PropertyKey>, batch: boolean): string {
+  const [index, ...rest] = path;
+  const fields = rest.map(String).join('.');
+  if (!batch) return fields;
+  return fields ? `[${String(index)}].${fields}` : `[${String(index)}]`;
+}
+
+/**
+ * Validate a request body: one signal, or an array of 1 to MAX_BATCH.
+ *
+ * Each signal is checked on its own so a problem is reported at its own path.
+ * Validating "one signal OR an array" as a single union would report any bad
+ * field as one opaque issue with an empty path, which tells a producer nothing
+ * about which signal or field to fix.
+ */
+export function parseIngestBody(body: unknown): IngestBodyResult {
+  const batch = Array.isArray(body);
+  const items = batch ? body : [body];
+
+  if (items.length < 1 || items.length > MAX_BATCH) {
+    return {
+      ok: false,
+      error: `Send between 1 and ${MAX_BATCH} signals per request`,
+      issues: [],
+    };
+  }
+
+  const parsed = z.array(ingestedSignalSchema).safeParse(items);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: 'Invalid signal',
+      issues: parsed.error.issues.slice(0, 20).map((issue) => ({
+        path: formatPath(issue.path, batch),
+        message: issue.message,
+      })),
+    };
+  }
+  return { ok: true, signals: parsed.data };
+}

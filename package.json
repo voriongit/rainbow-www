@@ -9,16 +9,21 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "gen:icons": "node scripts/gen-icons.mjs",
     "build:cf": "cross-env CF_WORKER_BUILD=1 next build --webpack && opennextjs-cloudflare build --skipNextBuild",
     "preview:cf": "npm run build:cf && wrangler dev",
-    "deploy:cf": "npm run build:cf && wrangler deploy"
+    "preview:cf:live": "npm run build:cf && wrangler dev -c wrangler.live.jsonc",
+    "deploy:cf": "npm run build:cf && wrangler deploy",
+    "deploy:cf:live": "npm run build:cf && wrangler deploy -c wrangler.live.jsonc"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
     "@vercel/analytics": "^1.6.1",
     "@vorionsys/basis-spec": "^1.2.0",
     "@vorionsys/rainbow": "^0.3.0",
+    "jose": "^6.2.12",
     "lucide-react": "^0.468.0",
     "motion": "^12.40.0",
     "next": "^16.1.0",
@@ -40,6 +45,7 @@
     "sharp": "^0.35.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
+    "vitest": "^3.2.7",
     "wrangler": "^4.103.0"
   }
 }

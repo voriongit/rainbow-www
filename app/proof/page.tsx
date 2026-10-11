@@ -32,6 +32,7 @@ import {
   getAgentInfo,
   getAgentRiskEvidence,
   getAgentSignals,
+  getProvenance,
   isPresetDuration,
   PRESET_DURATIONS,
 } from '../lib/data-source';
@@ -279,6 +280,7 @@ function StageLegend({ byStage }: { byStage: Record<ProofStage, number> }) {
 
 export default async function ProofChainPage({ searchParams }: PageProps) {
   await ensureHydrated();
+  const isLive = getProvenance().mode === 'live';
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
   const order: 'newest' | 'oldest' = sp.order === 'oldest' ? 'oldest' : 'newest';
@@ -322,7 +324,7 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
           <div>
             <div className="flex items-center gap-2 text-[11px]">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/[0.08] px-2 py-0.5 font-semibold text-amber-200/90">
-                <ShieldCheck size={12} aria-hidden /> Ordered audit trail (simulated)
+                <ShieldCheck size={12} aria-hidden /> Ordered audit trail{isLive ? '' : ' (simulated)'}
               </span>
             </div>
             <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-white/90">
@@ -355,10 +357,21 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
       {/* Synthetic / honesty banner — prominent, always visible. */}
       <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.07] px-4 py-3">
         <p className="text-xs leading-relaxed text-amber-100/90">
-          <span className="font-bold">Synthetic, illustrative — not live data.</span> This is a
-          read-only reconstruction of how signals propagated through a deterministic, seeded
-          simulator: raw events → canary results → risk-accumulator crossings → circuit-breaker
-          decisions, grouped by correlation id. It is an ordered, attributable record of signals.
+          {isLive ? (
+            <>
+              <span className="font-bold">Live telemetry, read-only.</span> This is a reconstruction
+              of how the signals this agent reported propagated: raw events → canary results →
+              risk-accumulator crossings → circuit-breaker decisions, grouped by correlation id.
+            </>
+          ) : (
+            <>
+              <span className="font-bold">Synthetic, illustrative — not live data.</span> This is a
+              read-only reconstruction of how signals propagated through a deterministic, seeded
+              simulator: raw events → canary results → risk-accumulator crossings → circuit-breaker
+              decisions, grouped by correlation id.
+            </>
+          )}{' '}
+          It is an ordered, attributable record of signals.
           Nothing on this page is hashed, signed or anchored, so it is{' '}
           <span className="font-semibold">not</span> tamper-proof and not a cryptographic guarantee.
           RAINBOW observes and records; it does not control agents.
@@ -379,7 +392,7 @@ export default async function ProofChainPage({ searchParams }: PageProps) {
             </ExploreLink>
           ) : undefined
         }
-        footnote="Each step is a real (synthetic) trust-bus event read through the read-only accessors. Stages follow the canonical flow signal → canary → risk accumulator → circuit breaker. The Elbow marks the observed inflection where the continuous trust/risk curve bends into a discrete state change — it is detected in the stream, never invented."
+        footnote={`Each step is a ${isLive ? 'trust-bus event reported by the agent' : 'real (synthetic) trust-bus event'} read through the read-only accessors. Stages follow the canonical flow signal → canary → risk accumulator → circuit breaker. The Elbow marks the observed inflection where the continuous trust/risk curve bends into a discrete state change — it is detected in the stream, never invented.`}
       >
         <div className="flex flex-col gap-4">
           <StageLegend byStage={chain.summary.byStage} />

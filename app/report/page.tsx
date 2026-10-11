@@ -28,6 +28,7 @@ import {
   getFleetOverview,
   getProvenance,
   isPresetDuration,
+  liveDataUnavailable,
 } from '../lib/data-source';
 import { fmtDateTime, fmtNum, fmtPct, fmtSigned } from '../lib/format';
 import { accumulatorWord, insightMeta } from '../lib/insights';
@@ -140,6 +141,7 @@ function scopeMismatch(
 
 export default async function ReportPage({ searchParams }: PageProps) {
   await ensureHydrated();
+  if (liveDataUnavailable()) return null;
   const params = await searchParams;
   const provenance = getProvenance();
   const isLive = provenance.mode === 'live';

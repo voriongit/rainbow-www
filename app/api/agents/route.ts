@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2024-2026 Vorion LLC
 
-/** Read-only: fleet roster. Live when agents have reported, simulated otherwise. */
+/**
+ * Read-only: fleet roster. Public deployment: the seeded fleet. Live deployment:
+ * real agents, or a 503 saying why there are none yet.
+ */
 
-import { ensureHydrated, getAgents, getProvenance } from '../../lib/data-source';
+import {
+  ensureHydrated,
+  getAgents,
+  getProvenance,
+  unavailableResponse,
+} from '../../lib/data-source';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   await ensureHydrated();
   const provenance = getProvenance();
+  const unavailable = unavailableResponse(provenance);
+  if (unavailable) return unavailable;
 
   return Response.json(
     // `synthetic` is kept for existing consumers, but it is now DERIVED from

@@ -15,18 +15,19 @@
  *
  *   SimulatedFleetSource — FleetSimulator, the seeded demo fleet.
  *   LiveFleetSource      — real signals ingested via POST /api/signals and
- *                          persisted in Supabase (SupabaseWindowStore).
+ *                          persisted in Supabase and read through the
+ *                          LiveSignalFeed.
  *
- * Selection is in data-source.ts and is evidence-based: live only when a
- * store is configured AND it actually holds signals. A configured-but-empty
- * store is reported as simulated-with-a-reason, not as an empty real fleet,
- * because an empty dashboard would read as "the fleet is fine" rather than
- * "nothing has reported yet".
+ * Selection is by deployment, in data-source.ts: the public deployment is
+ * always simulated and the live deployment is always live. A live deployment
+ * with nothing to show says so (`Provenance.available`) rather than falling
+ * back to the simulator or drawing an empty fleet, because an empty dashboard
+ * would read as "the fleet is fine" rather than "nothing has reported yet".
  */
 
 import 'server-only';
 
-import { CIRCUIT_BREAKER } from '@vorionsys/basis-spec';
+import { CIRCUIT_BREAKER, MAX_TRUST_SCORE, MIN_TRUST_SCORE } from '@vorionsys/basis-spec';
 import type { IngestedSignal, WindowStore } from '@vorionsys/rainbow';
 import { tierKeyForScore } from './tiers';
 import type { SimAgentInfo } from './simulator';
@@ -75,31 +76,57 @@ export class SimulatedFleetSource implements FleetSource {
 const EPOCH = new Date(0);
 const FAR_FUTURE = new Date(8.64e15);
 
+/** An agent's running trust score after each of its signals, oldest first. */
+export interface ScoreTimeline {
+  timesMs: number[];
+  scores: number[];
+  /** The score before the first signal. */
+  baseline: number;
+}
+
 /**
- * Absolute trust score for a live agent at a point in time.
+ * Build the score timeline for one agent's signals (oldest first).
  *
  * Producers SHOULD send `scoreAfter` — the score their own engine computed.
- * When they do, the most recent one at or before `at` is authoritative.
- * When they never do, the only thing rainbow actually knows is the sum of the
- * deltas it was sent, so that is what we report. We do not invent a starting
- * score: an undeclared baseline is 0, and the accumulated deltas are real.
+ * When they do, it is authoritative and resets the running total. When they
+ * never do, the only thing rainbow actually knows is the sum of the deltas it
+ * was sent, so that is what we report.
+ *
+ * The baseline (the score before the first signal) is declared too when the
+ * first signal carries `scoreAfter`: it is that score minus the signal's delta.
+ * A window that starts before an agent's first signal replays from there, not
+ * from 0, which would draw every new agent's trajectory climbing out of zero.
+ * We do not invent a starting score: with nothing declared, the baseline is 0.
  */
-function scoreAt(signals: IngestedSignal[], at: Date): number {
-  const atMs = at.getTime();
-  let score = 0;
-
+export function buildScoreTimeline(signals: IngestedSignal[]): ScoreTimeline {
+  const timesMs: number[] = [];
+  const scores: number[] = [];
+  const first = signals[0];
+  const baseline =
+    first && typeof first.scoreAfter === 'number' && Number.isFinite(first.scoreAfter)
+      ? Math.min(MAX_TRUST_SCORE, Math.max(MIN_TRUST_SCORE, first.scoreAfter - first.delta))
+      : 0;
+  let score = baseline;
   for (const signal of signals) {
-    if (signal.timestamp.getTime() > atMs) break;
-    const declared = (signal as { scoreAfter?: number }).scoreAfter;
-    if (typeof declared === 'number' && Number.isFinite(declared)) {
-      // A declared score is authoritative and resets the running total.
-      score = declared;
-    } else {
-      // Otherwise the only truth available is the delta rainbow was sent.
-      score += signal.delta;
-    }
+    const declared = signal.scoreAfter;
+    score = typeof declared === 'number' && Number.isFinite(declared) ? declared : score + signal.delta;
+    timesMs.push(signal.timestamp.getTime());
+    scores.push(score);
   }
-  return score;
+  return { timesMs, scores, baseline };
+}
+
+/** The score after the last signal at or before `atMs` (the baseline before the first). */
+export function scoreAtTime(timeline: ScoreTimeline, atMs: number): number {
+  // First index whose time is after atMs; the signal before it is the answer.
+  let low = 0;
+  let high = timeline.timesMs.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (timeline.timesMs[mid] <= atMs) low = mid + 1;
+    else high = mid;
+  }
+  return low === 0 ? timeline.baseline : timeline.scores[low - 1];
 }
 
 /** Undeclared observability IS black-box — that is the accurate reading. */
@@ -130,23 +157,47 @@ function lifecycleOf(signals: IngestedSignal[], score: number): string {
   return 'ACTIVE';
 }
 
+interface AgentSeries {
+  signals: IngestedSignal[];
+  timeline: ScoreTimeline;
+}
+
+/**
+ * A live fleet over one snapshot of the store. Each agent's series is built on
+ * first use and kept, so the dozens of score lookups a single render makes cost
+ * one pass per agent, not one per lookup. A source must therefore be replaced,
+ * not reused, when the store changes (the live feed hands out a fresh one).
+ */
 export class LiveFleetSource implements FleetSource {
   readonly mode = 'live' as const;
+  private readonly series = new Map<string, AgentSeries>();
+
   constructor(private readonly store: WindowStore) {}
 
   ensureUpTo(): void {
     // Real time. Data arrives through POST /api/signals, not by generation.
   }
 
-  private signalsFor(agentId: string): IngestedSignal[] {
-    return this.store.query(agentId, EPOCH, FAR_FUTURE);
+  private seriesFor(agentId: string): AgentSeries {
+    let entry = this.series.get(agentId);
+    if (!entry) {
+      const signals = this.store.query(agentId, EPOCH, FAR_FUTURE);
+      entry = { signals, timeline: buildScoreTimeline(signals) };
+      this.series.set(agentId, entry);
+    }
+    return entry;
+  }
+
+  /** Stable roster order: ids sorted, not the order agents happened to report. */
+  private agentIds(): string[] {
+    return this.store.agentIds().slice().sort();
   }
 
   agents(): AgentInfo[] {
-    const now = new Date();
-    return this.store.agentIds().map((agentId) => {
-      const signals = this.signalsFor(agentId);
-      const score = scoreAt(signals, now);
+    const nowMs = Date.now();
+    return this.agentIds().map((agentId) => {
+      const { signals, timeline } = this.seriesFor(agentId);
+      const score = scoreAtTime(timeline, nowMs);
       return {
         agentId,
         // No invented narrative label — a real agent is named by its id.
@@ -161,13 +212,13 @@ export class LiveFleetSource implements FleetSource {
   }
 
   currentScores(): Map<string, number> {
-    const now = new Date();
+    const nowMs = Date.now();
     return new Map(
-      this.store.agentIds().map((agentId) => [agentId, scoreAt(this.signalsFor(agentId), now)]),
+      this.agentIds().map((agentId) => [agentId, scoreAtTime(this.seriesFor(agentId).timeline, nowMs)]),
     );
   }
 
   resolveScoreAt(agentId: string, at: Date): number {
-    return scoreAt(this.signalsFor(agentId), at);
+    return scoreAtTime(this.seriesFor(agentId).timeline, at.getTime());
   }
 }

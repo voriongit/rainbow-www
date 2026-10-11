@@ -10,8 +10,17 @@
  */
 
 import type { Metadata } from 'next';
+import { isLiveDeployment } from './deployment';
 
 export const SITE_URL = 'https://rainbow.vorion.org';
+
+/** Real telemetry is never indexed, and never offered to link unfurlers. */
+export const PRIVATE_ROBOTS: NonNullable<Metadata['robots']> = {
+  index: false,
+  follow: false,
+  nocache: true,
+  googleBot: { index: false, follow: false, noimageindex: true },
+};
 
 export function pageMetadata({
   title,
@@ -26,6 +35,13 @@ export function pageMetadata({
   /** View-defining params only (agent, window…); undefined values dropped. */
   query?: Record<string, string | undefined>;
 }): Metadata {
+  // The live deployment is private. Its titles name real agents, so it gets no
+  // canonical URL (which would point at the public site), no OpenGraph or
+  // Twitter card, and a noindex directive.
+  if (isLiveDeployment()) {
+    return { title: { absolute: `${title} — RAINBOW Live` }, description, robots: PRIVATE_ROBOTS };
+  }
+
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(query ?? {})) {
     if (v) qs.set(k, v);

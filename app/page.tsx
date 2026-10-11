@@ -19,6 +19,7 @@ import {
   getProvenance,
   isPresetDuration,
   PRESET_DURATIONS,
+  liveDataUnavailable,
 } from './lib/data-source';
 import { pageMetadata } from './lib/page-metadata';
 import { fmtDateTime, fmtNum } from './lib/format';
@@ -67,6 +68,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 export default async function DashboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   await ensureHydrated();
+  if (liveDataUnavailable()) return null;
   // What this page is actually showing, derived from whether real signals
   // exist. Every "synthetic" claim below reads from here, so the copy cannot
   // keep saying "demo" once a real fleet starts reporting.
@@ -76,7 +78,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // Fleet is the front door; an agent is a drill-down chosen in the URL.
   const isFleet = !data.agents.some((a) => a.agentId === params.agent);
   const overview = getFleetOverview(data.duration);
-  const delegationSummary = getDelegationSummary(data.duration);
+  // Delegation is modeled over the stream under a declared policy, so the live
+  // deployment (real telemetry only) does not compute or show it.
+  const delegationSummary = isLive ? undefined : getDelegationSummary(data.duration);
   const sparklines: Record<string, { t: number; v: number }[]> = {};
   for (const s of getFleetSparklines(data.duration)) sparklines[s.agentId] = s.points;
 
@@ -165,13 +169,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             >
               Compare ↗
             </ExploreLink>
-            <ExploreLink
-              href="/lab"
-              className="text-xs text-white/45"
-              title="Delegation health — derived under a modeled orchestration policy"
-            >
-              Lab ↗
-            </ExploreLink>
+            {!isLive && (
+              <ExploreLink
+                href="/lab"
+                className="text-xs text-white/45"
+                title="Delegation health — derived under a modeled orchestration policy"
+              >
+                Lab ↗
+              </ExploreLink>
+            )}
             <ExploreLink
               href={exploreHref('/report', {
                 window: data.duration,
@@ -260,17 +266,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
                   ? 'This view is read-only — audit infrastructure and trust telemetry. Rainbow observes; it does not make trust decisions.'
                   : 'Everything here is synthetic and read-only — audit infrastructure and trust telemetry, not live governance.'}
               </li>
-              <li>
-                Next: explore the stack at{' '}
-                <a href="https://vorion.org" className="underline hover:text-cyan-100">
-                  vorion.org
-                </a>
-                , or watch agents get audited &amp; gated at{' '}
-                <a href="https://demo.vorion.org" className="underline hover:text-cyan-100">
-                  demo.vorion.org
-                </a>
-                .
-              </li>
+              {!isLive && (
+                <li>
+                  Next: explore the stack at{' '}
+                  <a href="https://vorion.org" className="underline hover:text-cyan-100">
+                    vorion.org
+                  </a>
+                  , or watch agents get audited &amp; gated at{' '}
+                  <a href="https://demo.vorion.org" className="underline hover:text-cyan-100">
+                    demo.vorion.org
+                  </a>
+                  .
+                </li>
+              )}
             </ul>
           </details>
         </div>
@@ -350,30 +358,32 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       )}
 
       {/* Conversion CTAs — bridge to the wider Vorion ecosystem (claim-safe) */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-3 text-sm">
-        <span className="text-white/45">Take it further:</span>
-        <a
-          href="https://vorion.org"
-          className="font-medium text-cyan-300/90 transition-colors hover:text-cyan-200"
-        >
-          Explore the Vorion stack ↗
-        </a>
-        <a href="https://demo.vorion.org" className="text-white/70 transition-colors hover:text-white">
-          See agents audited &amp; gated ↗
-        </a>
-        <a
-          href="https://www.npmjs.com/package/@vorionsys/rainbow"
-          className="text-white/70 transition-colors hover:text-white"
-        >
-          @vorionsys/rainbow on npm ↗
-        </a>
-        <a
-          href="https://www.npmjs.com/package/@vorionsys/basis-spec"
-          className="text-white/70 transition-colors hover:text-white"
-        >
-          BASIS spec on npm ↗
-        </a>
-      </div>
+      {!isLive && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-3 text-sm">
+          <span className="text-white/45">Take it further:</span>
+          <a
+            href="https://vorion.org"
+            className="font-medium text-cyan-300/90 transition-colors hover:text-cyan-200"
+          >
+            Explore the Vorion stack ↗
+          </a>
+          <a href="https://demo.vorion.org" className="text-white/70 transition-colors hover:text-white">
+            See agents audited &amp; gated ↗
+          </a>
+          <a
+            href="https://www.npmjs.com/package/@vorionsys/rainbow"
+            className="text-white/70 transition-colors hover:text-white"
+          >
+            @vorionsys/rainbow on npm ↗
+          </a>
+          <a
+            href="https://www.npmjs.com/package/@vorionsys/basis-spec"
+            className="text-white/70 transition-colors hover:text-white"
+          >
+            BASIS spec on npm ↗
+          </a>
+        </div>
+      )}
 
       {/* Primary panels — fleet scope by default, one agent when chosen */}
       {isFleet ? (
@@ -429,6 +439,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       <FleetPanel
         fleet={data.fleet}
         agents={data.agents}
+        simulated={!isLive}
         selectedAgentId={isFleet ? undefined : data.agentId}
         duration={data.duration}
         sparklines={sparklines}
@@ -440,8 +451,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
       {/* Modeled — kept below every grounded section, with its own badge. */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <DelegationTeaserPanel summary={delegationSummary} window={data.duration} />
-        <div className="flex flex-col justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 text-xs text-white/55 lg:col-span-2">
+        {delegationSummary && (
+          <DelegationTeaserPanel summary={delegationSummary} window={data.duration} />
+        )}
+        <div className={`flex flex-col justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-5 py-4 text-xs text-white/55 ${isLive ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
           <p className="font-semibold uppercase tracking-wider text-white/55">A guided path</p>
           <ol className="list-inside list-decimal space-y-1 leading-relaxed">
             <li>
@@ -482,13 +495,15 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               </ExploreLink>{' '}
               two agents factor by factor.
             </li>
-            <li>
-              Try a routing policy in the{' '}
-              <ExploreLink href={exploreHref('/lab', { window: data.duration })} className="text-cyan-300/85">
-                Lab
-              </ExploreLink>{' '}
-              (modeled, not grounded).
-            </li>
+            {!isLive && (
+              <li>
+                Try a routing policy in the{' '}
+                <ExploreLink href={exploreHref('/lab', { window: data.duration })} className="text-cyan-300/85">
+                  Lab
+                </ExploreLink>{' '}
+                (modeled, not grounded).
+              </li>
+            )}
           </ol>
           <p className="text-[11px] text-white/45">
             <ExploreLink href="/concepts" className="text-white/55">
@@ -525,12 +540,20 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <li>
             <span className="text-white/55">Source</span> — {provenance.reason}
           </li>
-          <li>
-            <span className="text-white/55">Grounded vs modeled</span> — cross-agent correlation is
-            derived from real signal co-occurrence; delegation health is modeled under a declared
-            policy (the simulator has no native agent-to-agent delegation), shown as a
-            &ldquo;modeled policy&rdquo; teaser with full logic in the Lab.
-          </li>
+          {isLive ? (
+            <li>
+              <span className="text-white/55">Grounded</span> — every figure is computed from the
+              signals agents reported, and cross-agent correlation is derived from co-occurrence in
+              that stream. Delegation is not shown: no escalation events are ingested yet.
+            </li>
+          ) : (
+            <li>
+              <span className="text-white/55">Grounded vs modeled</span> — cross-agent correlation is
+              derived from real signal co-occurrence; delegation health is modeled under a declared
+              policy (the simulator has no native agent-to-agent delegation), shown as a
+              &ldquo;modeled policy&rdquo; teaser with full logic in the Lab.
+            </li>
+          )}
           <li>
             <span className="text-white/55">Read-only</span> — no mutation paths to trust data, no
             browser storage; view state lives in the URL.
@@ -545,14 +568,18 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             Browse all concepts
           </ExploreLink>{' '}
           ·{' '}
-          <ExploreLink
-            href="/model"
-            className="text-white/40"
-            title="Illustrative model of the agent-control layer — not connected to live agents"
-          >
-            Control model
-          </ExploreLink>{' '}
-          ·{' '}
+          {!isLive && (
+            <>
+              <ExploreLink
+                href="/model"
+                className="text-white/40"
+                title="Illustrative model of the agent-control layer — not connected to live agents"
+              >
+                Control model
+              </ExploreLink>{' '}
+              ·{' '}
+            </>
+          )}
           <a href="https://vorion.org" className="underline hover:text-white/60">
             vorion.org
           </a>{' '}
@@ -560,7 +587,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <a href="https://demo.vorion.org" className="underline hover:text-white/60">
             demo.vorion.org
           </a>{' '}
-          · <InstallButton />
+          {!isLive && <>· <InstallButton /></>}
         </p>
       </footer>
     </main>

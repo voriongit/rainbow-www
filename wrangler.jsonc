@@ -1,5 +1,5 @@
 {
-  // Cloudflare Workers config for the OpenNext build of rainbow-www.
+  // Cloudflare Workers config for the OpenNext build of rainbow-www (public site).
   // Generated assets live in .open-next/ (git-ignored); produced by `npm run build:cf`.
   //
   //   npm run deploy:cf    build, then publish to rainbow.vorion.org
@@ -8,10 +8,10 @@
   // custom domain below attaches on deploy. Delete any existing DNS record for
   // `rainbow` (the old Vercel CNAME) first, or the deploy fails with error 100117.
   //
-  // Optional secrets (`npx wrangler secret put NAME`). With none set the dashboard
-  // runs its seeded simulator and labels itself "Synthetic demo" (see .env.example):
-  //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   persistent signal store
-  //   RAINBOW_INGEST_TOKEN                      bearer token for POST /api/signals
+  // This is the PUBLIC deployment: always the seeded synthetic demo. It reads no
+  // signal store and accepts no ingest, so it needs no secrets, and store
+  // settings are ignored here even if present. The private live view is a
+  // separate Worker: wrangler.live.jsonc (`npm run deploy:cf:live`).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "rainbow-www",
   "main": ".open-next/worker.js",

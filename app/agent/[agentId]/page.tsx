@@ -17,6 +17,7 @@ import {
   getDashboardData,
   getAgentSignals,
   isPresetDuration,
+  liveDataUnavailable,
 } from '../../lib/data-source';
 import { conceptSlug } from '../../lib/glossary';
 import { TIER_COLORS, tierName, type TierKey } from '../../lib/tiers';
@@ -87,6 +88,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
 
 export default async function AgentProfilePage({ params, searchParams }: PageProps) {
   await ensureHydrated();
+  if (liveDataUnavailable()) return null;
   const { agentId } = await params;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';

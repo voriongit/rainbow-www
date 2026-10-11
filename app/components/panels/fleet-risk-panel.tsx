@@ -3,6 +3,7 @@
 
 import { RISK_ACCUMULATOR } from '@vorionsys/basis-spec';
 import { Panel } from '../panel';
+import { AccumulatorUndercount } from '../accumulator-undercount';
 import { ExploreLink, exploreHref } from '../explore-link';
 import { InfoLink } from '../info-link';
 import { fmtNum } from '../../lib/format';
@@ -35,6 +36,7 @@ export function FleetRiskPanel({ overview }: { overview: FleetOverview }) {
     .slice()
     .sort((a, b) => b.risk.peakInWindow - a.risk.peakInWindow || a.agentId.localeCompare(b.agentId));
   const over = ranked.filter((r) => r.risk.peakInWindow >= RISK_ACCUMULATOR.warningThreshold).length;
+  const excluded = ranked.reduce((sum, r) => sum + r.risk.excludedFromAccumulator, 0);
 
   return (
     <Panel
@@ -42,6 +44,9 @@ export function FleetRiskPanel({ overview }: { overview: FleetOverview }) {
       subtitle={`Per agent · rolling ${RISK_ACCUMULATOR.windowHours}h · last ${duration} · ${over} of ${ranked.length} crossed warning`}
       footnote={`Thresholds: warning ${RISK_ACCUMULATOR.warningThreshold}, degraded ${RISK_ACCUMULATOR.degradedThreshold}, circuit breaker ${RISK_ACCUMULATOR.cbThreshold}. Direction compares the first and last quarter of the window, the same rule as each agent's chart badge.`}
     >
+      <div className="mb-3 empty:hidden">
+        <AccumulatorUndercount count={excluded} scope="across the fleet" />
+      </div>
       <div className="-mx-1 overflow-x-auto">
         <table className="w-full min-w-[18rem] text-left text-[12px]">
           <caption className="sr-only">Risk accumulator per agent, highest peak first</caption>

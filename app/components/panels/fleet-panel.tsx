@@ -11,6 +11,8 @@ import type { SimAgentInfo } from '../../lib/simulator';
 interface FleetPanelProps {
   fleet: OrchestrationSnapshot;
   agents: SimAgentInfo[];
+  /** True for the seeded demo fleet; false for real agents. */
+  simulated?: boolean;
   selectedAgentId?: string;
   duration: string;
   /** Per-agent downsampled trajectory for the roster sparklines. */
@@ -24,11 +26,18 @@ const CLUSTER_COLORS = {
 } as const;
 
 /** Fleet roster (searchable, with sparklines) + cross-agent anomaly clusters */
-export function FleetPanel({ fleet, agents, selectedAgentId, duration, sparklines }: FleetPanelProps) {
+export function FleetPanel({
+  fleet,
+  agents,
+  simulated = true,
+  selectedAgentId,
+  duration,
+  sparklines,
+}: FleetPanelProps) {
   return (
     <Panel
       title="Fleet view"
-      subtitle={`${agents.length} simulated agents · search/filter the roster · anomaly clustering over window signals`}
+      subtitle={`${agents.length} ${simulated ? 'simulated ' : ''}agents · search/filter the roster · anomaly clustering over window signals`}
     >
       <div className="flex flex-col gap-5">
         {/* Anomaly clusters */}

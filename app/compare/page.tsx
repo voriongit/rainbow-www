@@ -15,8 +15,10 @@ import {
   getAgentInfo,
   getDashboardData,
   getAgents,
+  getProvenance,
   isPresetDuration,
   type DashboardData,
+  liveDataUnavailable,
 } from '../lib/data-source';
 import { TIER_COLORS, tierName, tierIndexForScore, type TierKey } from '../lib/tiers';
 import { STATUS, tint, healthColor } from '../lib/status-colors';
@@ -283,12 +285,14 @@ function OverlayTrajectory({
   colorA,
   colorB,
   window,
+  live,
 }: {
   dA: DashboardData;
   dB: DashboardData;
   colorA: string;
   colorB: string;
   window: string;
+  live: boolean;
 }) {
   const idA = dA.agentInfo.agentId;
   const idB = dB.agentInfo.agentId;
@@ -299,7 +303,7 @@ function OverlayTrajectory({
     <Panel
       title="Overlaid trust trajectories"
       subtitle={`${idA} vs ${idB} · window ${window}`}
-      footnote="Both score trajectories on one shared scale, read directly from each agent's windowed analytics. Synthetic deterministic data — no live agents."
+      footnote={`Both score trajectories on one shared scale, read directly from each agent's windowed analytics. ${live ? 'Live telemetry reported by these agents.' : 'Synthetic deterministic data — no live agents.'}`}
     >
       <LineChart
         id="cmp-overlay"
@@ -428,6 +432,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 
 export default async function ComparePage({ searchParams }: PageProps) {
   await ensureHydrated();
+  if (liveDataUnavailable()) return null;
   const sp = await searchParams;
   const window = isPresetDuration(sp.window) ? sp.window : '24h';
 
@@ -497,6 +502,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
         colorA={colorA}
         colorB={colorB}
         window={window}
+        live={getProvenance().mode === 'live'}
       />
 
       <FactorDiff dA={dA} dB={dB} colorA={colorA} colorB={colorB} window={window} />

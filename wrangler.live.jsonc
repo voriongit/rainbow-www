@@ -1,0 +1,46 @@
+{
+  // Cloudflare Workers config for the PRIVATE live view of rainbow-www.
+  //
+  // Same build as the public site (`npm run build:cf`); RAINBOW_DEPLOYMENT=live
+  // switches it to real telemetry only. It never shows the simulator, and it
+  // serves nothing without a verified Cloudflare Access identity.
+  //
+  //   npm run deploy:cf:live    build, then publish this Worker
+  //
+  // Before the first deploy (order matters; see README "Private live view"):
+  //   1. Create a Cloudflare Access application for the hostname below, with a
+  //      policy naming who may see it, and a Bypass policy for /api/signals
+  //      (producers are machines; that route has its own bearer token).
+  //   2. Apply sql/rainbow-signals.sql to the Supabase project.
+  //   3. Set the secrets (`npx wrangler secret put NAME -c wrangler.live.jsonc`):
+  //        CF_ACCESS_TEAM_DOMAIN       <team>.cloudflareaccess.com
+  //        CF_ACCESS_AUD               the Access application's AUD tag
+  //        SUPABASE_URL                https://<ref>.supabase.co
+  //        SUPABASE_SERVICE_ROLE_KEY   server-only, never sent to a browser
+  //        RAINBOW_INGEST_TOKEN        bearer token producers send
+  //
+  // Missing Access settings make every page answer 503, never serve openly.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rainbow-www-live",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  "vars": {
+    "RAINBOW_DEPLOYMENT": "live"
+  },
+  // Reachable only on the hostname Access protects: no workers.dev URL and no
+  // per-version preview URLs, which Access would not cover.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    // The hostname is a proposal; change it before the first deploy if you prefer another.
+    { "pattern": "rainbow-live.vorion.org", "custom_domain": true }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
